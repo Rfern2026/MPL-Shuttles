@@ -271,7 +271,7 @@ Alex Kim
     <div id="tab-passes" class="tab-content hidden">
       <div class="card">
         <h2>Boarding passes</h2>
-        <p class="muted" style="margin-top:-6px;">Print or hand out — each attendee's QR code identifies them at boarding. The code below the QR also works for manual entry.</p>
+        <p class="muted" style="margin-top:-6px;">Each attendee gets 4 identical passes — one labeled per trip, so everyone can carry one for each ride. Any copy scans as valid for any trip. The code below the QR also works for manual entry.</p>
         <button class="btn secondary" id="print-btn">Print All</button>
       </div>
       <div id="print-area">
@@ -283,8 +283,9 @@ Alex Kim
     <div id="tab-checkin" class="tab-content hidden">
       <div class="card">
         <h2>This captain is boarding</h2>
-        <p class="muted" style="margin-top:-6px;">Set this once per shuttle. Every check-in below — scanned or tapped — gets logged to this shuttle.</p>
+        <p class="muted" style="margin-top:-6px;">Set the trip and shuttle once. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all 4 trips.</p>
         <div class="row">
+          <select id="checkin-session-active" style="margin-bottom:0; width:auto;"></select>
           <select id="checkin-shuttle-active" style="margin-bottom:0; width:auto;"></select>
           <button class="btn" id="toggle-scan-btn">Start Camera Scan</button>
         </div>
@@ -296,7 +297,7 @@ Alex Kim
       </div>
       <div class="card">
         <h2>Tap to check in</h2>
-        <p class="muted" style="margin-top:-6px;">Shows everyone not yet boarded on any shuttle. Tapping Check In logs them onto the shuttle selected above.</p>
+        <p class="muted" style="margin-top:-6px;">Shows everyone not yet boarded on this trip. Tapping Check In logs them onto the trip and shuttle selected above.</p>
         <input type="text" id="checkin-search" placeholder="Search by name...">
         <label style="display:flex; align-items:center; gap:8px; font-family:var(--sans); font-size:13px; color:var(--paper); cursor:pointer;">
           <input type="checkbox" id="show-boarded-toggle" style="width:auto; margin:0;"> Show already-boarded too
@@ -307,12 +308,17 @@ Alex Kim
 
     <!-- DASHBOARD TAB -->
     <div id="tab-dashboard" class="tab-content hidden">
+      <div class="card">
+        <h2>Viewing trip</h2>
+        <select id="dashboard-session-select" style="margin-bottom:0; width:auto;"></select>
+      </div>
       <div class="flip-grid" id="flip-grid"></div>
       <div class="card">
-        <h2>Not yet boarded</h2>
+        <h2>Not yet boarded on this trip</h2>
         <div id="missing-list" class="missing-list"></div>
       </div>
     </div>
+
 
   </div>
 </div>
@@ -320,9 +326,18 @@ Alex Kim
 <script>
 (function(){
   let roster = [];      // [{id, name}]
-  let checkins = {};    // {id: {time, shuttle}}
+  let checkins = {};    // {"sessionId::personId": {time, shuttle}}
   let html5QrCode = null;
   let scanning = false;
+  let dataLoaded = false;
+
+  const SESSIONS = [
+    { id: 'd1-am', label: 'Day 1 · Morning' },
+    { id: 'd1-pm', label: 'Day 1 · Afternoon' },
+    { id: 'd2-am', label: 'Day 2 · Morning' },
+    { id: 'd2-pm', label: 'Day 2 · Afternoon' }
+  ];
+  const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
 
   const el = id => document.getElementById(id);
 
@@ -386,6 +401,7 @@ Alex Kim
   function onRemoteUpdate(data){
     roster = (data && data.roster) || [];
     checkins = (data && data.checkins) || {};
+    dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
     renderRosterPreview();
     if(activeTab === 'passes') renderPasses();
@@ -444,15 +460,16 @@ Alex Kim
   function renderRosterPreview(){
     if(roster.length === 0){ el('roster-preview-card').style.display = 'none'; return; }
     el('roster-preview-card').style.display = 'block';
+    const tripsBoarded = r => SESSIONS.filter(s => checkins[checkinKey(s.id, r.id)]).length;
     let html = '<div>';
     roster.forEach(r=>{
-      const done = !!checkins[r.id];
+      const n = tripsBoarded(r);
       html += `<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>
           <div class="attendee-meta">${r.id}</div>
         </div>
-        <span class="attendee-meta">${done ? 'Boarded · Shuttle ' + checkins[r.id].shuttle : 'Not boarded'}</span>
+        <span class="attendee-meta">${n > 0 ? n + ' of 4 trips boarded' : 'Not boarded yet'}</span>
       </div>`;
     });
     html += '</div>';
@@ -483,22 +500,25 @@ Alex Kim
       return;
     }
     roster.forEach(r=>{
-      const pass = document.createElement('div');
-      pass.className = 'pass';
-      pass.innerHTML = `
-        <div class="pass-top">
-          <div class="pass-eyebrow">Boarding Pass</div>
-          <div class="pass-name">${escapeHtml(r.name)}</div>
-          <div class="pass-shuttle">Any shuttle · first come, first served</div>
-        </div>
-        <div class="pass-bottom">
-          <div class="qr" id="qr-${r.id}"></div>
-          <div class="pass-code">${r.id}</div>
-        </div>`;
-      grid.appendChild(pass);
-      try{
-        new QRCode(document.getElementById('qr-'+r.id), { text: r.id, width: 120, height: 120 });
-      }catch(e){ console.error('QR render failed', e); }
+      SESSIONS.forEach(sess=>{
+        const domId = 'qr-' + r.id + '-' + sess.id;
+        const pass = document.createElement('div');
+        pass.className = 'pass';
+        pass.innerHTML = `
+          <div class="pass-top">
+            <div class="pass-eyebrow">Boarding Pass · ${sess.label}</div>
+            <div class="pass-name">${escapeHtml(r.name)}</div>
+            <div class="pass-shuttle">Any shuttle · first come, first served</div>
+          </div>
+          <div class="pass-bottom">
+            <div class="qr" id="${domId}"></div>
+            <div class="pass-code">${r.id}</div>
+          </div>`;
+        grid.appendChild(pass);
+        try{
+          new QRCode(document.getElementById(domId), { text: r.id, width: 120, height: 120 });
+        }catch(e){ console.error('QR render failed', e); }
+      });
     });
   }
 
@@ -513,32 +533,52 @@ Alex Kim
     if(letters.includes(current)) sel.value = current;
   }
 
+  function populateSessionSelects(){
+    [el('checkin-session-active'), el('dashboard-session-select')].forEach(sel=>{
+      if(sel.options.length === 0){
+        sel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+      }
+    });
+  }
+
   function activeShuttle(){
     return el('checkin-shuttle-active').value;
   }
 
+  function activeSession(){
+    return el('checkin-session-active').value;
+  }
+
   function renderCheckin(){
+    populateSessionSelects();
     populateShuttleActive();
     renderCheckinList();
   }
 
   el('checkin-search').addEventListener('input', renderCheckinList);
   el('show-boarded-toggle').addEventListener('change', renderCheckinList);
+  el('checkin-session-active').addEventListener('change', renderCheckinList);
 
   function renderCheckinList(){
+    if(!dataLoaded){
+      el('checkin-list').innerHTML = '<p class="muted">Loading roster from the shared database — wait a moment before scanning.</p>';
+      return;
+    }
     const q = el('checkin-search').value.trim().toLowerCase();
     const showBoarded = el('show-boarded-toggle').checked;
-    let list = roster.filter(r => showBoarded || !checkins[r.id]);
+    const session = activeSession();
+    let list = roster.filter(r => showBoarded || !checkins[checkinKey(session, r.id)]);
     if(q) list = list.filter(r => r.name.toLowerCase().includes(q));
     list = list.slice().sort((a,b)=> a.name.localeCompare(b.name));
     const container = el('checkin-list');
-    if(list.length === 0){ container.innerHTML = '<p class="muted">Everyone matching this search has boarded.</p>'; return; }
+    if(list.length === 0){ container.innerHTML = '<p class="muted">Everyone matching this search has boarded this trip.</p>'; return; }
     container.innerHTML = list.map(r=>{
-      const done = !!checkins[r.id];
+      const key = checkinKey(session, r.id);
+      const done = !!checkins[key];
       return `<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>
-          <div class="attendee-meta">${done ? 'Boarded Shuttle ' + checkins[r.id].shuttle + ' · ' + new Date(checkins[r.id].time).toLocaleTimeString() : 'Not boarded'}</div>
+          <div class="attendee-meta">${done ? 'Boarded Shuttle ' + checkins[key].shuttle + ' · ' + new Date(checkins[key].time).toLocaleTimeString() : 'Not boarded this trip'}</div>
         </div>
         <button class="check-btn ${done?'done':'pending'}" data-id="${r.id}">${done ? 'Undo' : 'Check In'}</button>
       </div>`;
@@ -549,10 +589,11 @@ Alex Kim
   }
 
   async function toggleCheckin(id){
-    if(checkins[id]){
-      delete checkins[id];
+    const key = checkinKey(activeSession(), id);
+    if(checkins[key]){
+      delete checkins[key];
     } else {
-      checkins[id] = { time: Date.now(), shuttle: activeShuttle() };
+      checkins[key] = { time: Date.now(), shuttle: activeShuttle() };
     }
     await saveCheckins();
     renderCheckinList();
@@ -565,6 +606,10 @@ Alex Kim
   }
 
   el('toggle-scan-btn').addEventListener('click', async ()=>{
+    if(!dataLoaded){
+      showFlash('Still loading roster — try again in a second.', 'warn');
+      return;
+    }
     if(scanning){
       try{ await html5QrCode.stop(); }catch(e){}
       el('scan-box').classList.add('hidden');
@@ -582,9 +627,10 @@ Alex Kim
           const code = decodedText.trim().toUpperCase();
           const r = roster.find(x=>x.id === code);
           if(!r){ showFlash('Code not recognized: ' + code, 'warn'); return; }
-          if(checkins[r.id]){ showFlash(r.name + ' already checked in — Shuttle ' + checkins[r.id].shuttle, 'warn'); return; }
+          const key = checkinKey(activeSession(), r.id);
+          if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn'); return; }
           const shuttle = activeShuttle();
-          checkins[r.id] = { time: Date.now(), shuttle };
+          checkins[key] = { time: Date.now(), shuttle };
           await saveCheckins();
           showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok');
           renderCheckinList();
@@ -601,33 +647,44 @@ Alex Kim
 
   // ---- Dashboard ----
   function renderDashboard(){
+    populateSessionSelects();
+    el('dashboard-session-select').onchange = renderDashboard;
     if(roster.length === 0){
       el('flip-grid').innerHTML = '<p class="muted">Build a roster in the Setup tab first.</p>';
       el('missing-list').innerHTML = '';
       return;
     }
+    if(!dataLoaded){
+      el('flip-grid').innerHTML = '<p class="muted">Loading live data…</p>';
+      el('missing-list').innerHTML = '';
+      return;
+    }
+    const session = el('dashboard-session-select').value;
     const letters = shuttleLetters(getShuttleCount());
     const grid = el('flip-grid');
     let html = '';
     letters.forEach(l=>{
-      const boarded = Object.values(checkins).filter(c=>c.shuttle===l).length;
+      const boarded = roster.filter(r=>{
+        const c = checkins[checkinKey(session, r.id)];
+        return c && c.shuttle === l;
+      }).length;
       html += `<div class="flip-card">
         <div class="flip-label">Shuttle ${l}</div>
         <div class="flip-value">${boarded}</div>
       </div>`;
     });
     const totalAll = roster.length;
-    const boardedAll = roster.filter(r=>checkins[r.id]).length;
+    const boardedAll = roster.filter(r=>checkins[checkinKey(session, r.id)]).length;
     html += `<div class="flip-card">
       <div class="flip-label">Total Boarded</div>
       <div class="flip-value total">${boardedAll}<span style="font-size:18px;color:var(--ink-soft);"> / ${totalAll}</span></div>
     </div>`;
     grid.innerHTML = html;
 
-    const missing = roster.filter(r=>!checkins[r.id]).sort((a,b)=>a.name.localeCompare(b.name));
+    const missing = roster.filter(r=>!checkins[checkinKey(session, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
     const missingEl = el('missing-list');
     if(missing.length === 0){
-      missingEl.innerHTML = '<p class="muted">Everyone is accounted for.</p>';
+      missingEl.innerHTML = '<p class="muted">Everyone is accounted for on this trip.</p>';
     } else {
       missingEl.innerHTML = missing.map(r=>`<div class="attendee-row">
         <div>

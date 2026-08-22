@@ -1,0 +1,651 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --navy:#0F1C33;
+    --navy-panel:#182A4A;
+    --navy-panel-2:#20365E;
+    --amber:#FFB020;
+    --teal:#3FD9C0;
+    --red:#FF6B6B;
+    --paper:#EAEFF2;
+    --ink:#0F1C33;
+    --ink-soft:#4A5A78;
+    --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body, .board-root{
+    font-family: var(--sans);
+    background: var(--navy);
+    color: var(--paper);
+    margin:0;
+    min-height:100%;
+  }
+  .board-root{ padding: 0; }
+
+  .header{
+    background: linear-gradient(180deg, var(--navy-panel) 0%, var(--navy) 100%);
+    padding: 20px 20px 0 20px;
+    border-bottom: 2px solid var(--navy-panel-2);
+  }
+  .header-top{
+    display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  }
+  .eyebrow{
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--amber);
+    text-transform: uppercase;
+    margin: 0 0 4px 0;
+  }
+  h1{
+    font-size: 22px;
+    margin: 0 0 14px 0;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .tabs{
+    display:flex; gap: 4px; overflow-x:auto;
+  }
+  .tab{
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--ink-soft);
+    border: none;
+    padding: 10px 16px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+  }
+  .tab.active{
+    color: var(--amber);
+    border-bottom: 2px solid var(--amber);
+  }
+  .tab:hover:not(.active){ color: var(--paper); }
+
+  .panel{ padding: 20px; max-width: 900px; margin: 0 auto; }
+  .hidden{ display:none !important; }
+
+  .card{
+    background: var(--navy-panel);
+    border: 1px solid var(--navy-panel-2);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card h2{
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--amber);
+    margin: 0 0 12px 0;
+    font-family: var(--mono);
+  }
+  label{
+    display:block; font-size: 12px; color: var(--ink-soft); margin-bottom: 6px; font-family: var(--mono); letter-spacing: 0.04em;
+  }
+  textarea, input[type=text], select{
+    width: 100%;
+    background: var(--navy);
+    border: 1px solid var(--navy-panel-2);
+    color: var(--paper);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: var(--sans);
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
+  textarea{ min-height: 140px; resize: vertical; font-family: var(--mono); }
+  input[type=number]{
+    background: var(--navy); border: 1px solid var(--navy-panel-2); color: var(--paper);
+    border-radius: 6px; padding: 8px 10px; width: 80px; font-family: var(--mono);
+  }
+  .row{ display:flex; gap: 14px; align-items:flex-end; flex-wrap: wrap; }
+  .btn{
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: var(--amber);
+    color: var(--navy);
+    border: none;
+    border-radius: 6px;
+    padding: 11px 18px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  .btn:hover{ filter: brightness(1.08); }
+  .btn.secondary{
+    background: transparent;
+    color: var(--paper);
+    border: 1px solid var(--navy-panel-2);
+  }
+  .btn.danger{ background: var(--red); color: var(--navy); }
+  .btn:disabled{ opacity: 0.4; cursor: not-allowed; }
+
+  .muted{ color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+
+  /* Boarding pass grid */
+  .pass-grid{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .pass{
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  }
+  .pass-top{ padding: 14px 14px 10px 14px; border-bottom: 1px dashed #9AA7BD; position: relative; }
+  .pass-top::before, .pass-top::after{
+    content:''; position:absolute; bottom:-8px; width:16px; height:16px; background: var(--navy);
+    border-radius: 50%;
+  }
+  .pass-top::before{ left:-8px; }
+  .pass-top::after{ right:-8px; }
+  .pass-eyebrow{ font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; color: var(--ink-soft); text-transform: uppercase; }
+  .pass-name{ font-size: 17px; font-weight: 700; margin: 2px 0 0 0; }
+  .pass-shuttle{
+    display:inline-block; margin-top: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+    background: var(--navy); color: var(--amber); padding: 3px 8px; border-radius: 4px;
+  }
+  .pass-bottom{ padding: 14px; display:flex; flex-direction:column; align-items:center; gap: 6px; }
+  .pass-bottom .qr{ background:white; padding:6px; border-radius:6px; }
+  .pass-code{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-soft); }
+
+  /* Check-in */
+  .scan-box{ background: var(--navy); border: 1px solid var(--navy-panel-2); border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+  #reader{ width: 100%; max-width: 360px; margin: 0 auto; }
+  .flash{
+    padding: 12px 14px; border-radius: 8px; font-family: var(--mono); font-size: 13px; margin-bottom: 14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .flash.ok{ background: rgba(63,217,192,0.15); color: var(--teal); border:1px solid var(--teal); }
+  .flash.warn{ background: rgba(255,107,107,0.15); color: var(--red); border:1px solid var(--red); }
+
+  .attendee-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 10px 12px; border-bottom: 1px solid var(--navy-panel-2);
+  }
+  .attendee-row:last-child{ border-bottom: none; }
+  .attendee-name{ font-size: 14px; }
+  .attendee-meta{ font-family: var(--mono); font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .check-btn{
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    border-radius: 6px; padding: 7px 12px; cursor: pointer; border: none;
+  }
+  .check-btn.pending{ background: var(--navy-panel-2); color: var(--paper); }
+  .check-btn.done{ background: var(--teal); color: var(--navy); }
+
+  /* Dashboard */
+  .flip-grid{
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 14px; margin-bottom: 20px;
+  }
+  .flip-card{
+    background: var(--navy-panel); border: 1px solid var(--navy-panel-2); border-radius: 10px; padding: 16px; text-align:center;
+  }
+  .flip-label{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--ink-soft); text-transform: uppercase; }
+  .flip-value{ font-family: var(--mono); font-size: 34px; color: var(--amber); font-weight: 700; margin-top: 6px; letter-spacing: 0.02em; }
+  .flip-value.total{ color: var(--teal); }
+  .missing-list .attendee-name{ color: var(--red); }
+
+  #config-banner{
+    background: var(--red); color: var(--navy); font-family: var(--mono); font-size: 12px;
+    padding: 10px 20px; text-align: center; font-weight: 700;
+  }
+  #config-banner a{ color: var(--navy); }
+
+  @media print{
+    body *{ visibility: hidden; }
+    #print-area, #print-area *{ visibility: visible; }
+    #print-area{ position: absolute; left:0; top:0; width:100%; background: white !important; }
+    .pass{ break-inside: avoid; }
+  }
+</style>
+
+<div class="board-root">
+  <div id="config-banner" class="hidden">⚠ Firebase isn't configured yet — open this file and paste your firebaseConfig near the top of the script. Nothing will save until that's done.</div>
+  <div class="header">
+    <div class="header-top">
+      <div>
+        <p class="eyebrow">Shuttle Ops · Live Manifest</p>
+        <h1 id="event-title">Conference Shuttle Check-In</h1>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="setup">Setup</button>
+      <button class="tab" data-tab="passes">QR Codes</button>
+      <button class="tab" data-tab="checkin">Check-In</button>
+      <button class="tab" data-tab="dashboard">Dashboard</button>
+    </div>
+  </div>
+
+  <div class="panel">
+
+    <!-- SETUP TAB -->
+    <div id="tab-setup" class="tab-content">
+      <div class="card">
+        <h2>1 · Build the roster</h2>
+        <p class="muted" style="margin-top:-6px;">Paste one attendee name per line. Boarding is first come, first served — nobody is pre-assigned to a shuttle; captains just log which shuttle each person actually gets on.</p>
+        <label for="names-input">Attendee names</label>
+        <textarea id="names-input" placeholder="Jane Doe
+Sam Patel
+Alex Kim
+..."></textarea>
+        <div class="row">
+          <div>
+            <label for="shuttle-count">Number of shuttles</label>
+            <input type="number" id="shuttle-count" min="1" max="10" value="3">
+          </div>
+          <button class="btn" id="build-roster-btn">Build Roster</button>
+          <button class="btn secondary" id="add-more-btn">Add Names to Existing Roster</button>
+        </div>
+        <p class="muted" id="setup-status"></p>
+      </div>
+
+      <div class="card" id="roster-preview-card" style="display:none;">
+        <h2>2 · Roster</h2>
+        <p class="muted" style="margin-top:-6px;">Everyone below gets a QR boarding pass in the next tab. Shuttle is recorded when they check in, not before.</p>
+        <div id="roster-table"></div>
+      </div>
+
+      <div class="card">
+        <h2>Reset</h2>
+        <p class="muted" style="margin-top:-6px;">Clears the roster and all check-ins for everyone on this event. Use between events, not during one.</p>
+        <button class="btn danger" id="reset-btn">Reset Event Data</button>
+      </div>
+    </div>
+
+    <!-- PASSES TAB -->
+    <div id="tab-passes" class="tab-content hidden">
+      <div class="card">
+        <h2>Boarding passes</h2>
+        <p class="muted" style="margin-top:-6px;">Print or hand out — each attendee's QR code identifies them at boarding. The code below the QR also works for manual entry.</p>
+        <button class="btn secondary" id="print-btn">Print All</button>
+      </div>
+      <div id="print-area">
+        <div class="pass-grid" id="pass-grid"></div>
+      </div>
+    </div>
+
+    <!-- CHECKIN TAB -->
+    <div id="tab-checkin" class="tab-content hidden">
+      <div class="card">
+        <h2>This captain is boarding</h2>
+        <p class="muted" style="margin-top:-6px;">Set this once per shuttle. Every check-in below — scanned or tapped — gets logged to this shuttle.</p>
+        <div class="row">
+          <select id="checkin-shuttle-active" style="margin-bottom:0; width:auto;"></select>
+          <button class="btn" id="toggle-scan-btn">Start Camera Scan</button>
+        </div>
+        <div class="scan-box hidden" id="scan-box">
+          <div id="reader"></div>
+          <p class="muted" style="text-align:center;">Point a boarding pass QR at the camera. If the camera doesn't work in this preview, use the tap-to-check-in list below instead.</p>
+        </div>
+        <div id="flash-area"></div>
+      </div>
+      <div class="card">
+        <h2>Tap to check in</h2>
+        <p class="muted" style="margin-top:-6px;">Shows everyone not yet boarded on any shuttle. Tapping Check In logs them onto the shuttle selected above.</p>
+        <input type="text" id="checkin-search" placeholder="Search by name...">
+        <label style="display:flex; align-items:center; gap:8px; font-family:var(--sans); font-size:13px; color:var(--paper); cursor:pointer;">
+          <input type="checkbox" id="show-boarded-toggle" style="width:auto; margin:0;"> Show already-boarded too
+        </label>
+        <div id="checkin-list"></div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD TAB -->
+    <div id="tab-dashboard" class="tab-content hidden">
+      <div class="flip-grid" id="flip-grid"></div>
+      <div class="card">
+        <h2>Not yet boarded</h2>
+        <div id="missing-list" class="missing-list"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  let roster = [];      // [{id, name}]
+  let checkins = {};    // {id: {time, shuttle}}
+  let html5QrCode = null;
+  let scanning = false;
+
+  const el = id => document.getElementById(id);
+
+  // ============================================================
+  // FIREBASE SETUP — do this once before sharing the file:
+  // 1. Go to https://console.firebase.google.com → Add project (free, no credit card)
+  // 2. In the project: Build → Firestore Database → Create database → Start in test mode
+  // 3. Click the gear icon → Project settings → scroll to "Your apps" → click the </> (web) icon → register an app (nickname doesn't matter)
+  // 4. It will show you a firebaseConfig object — copy it and paste it below, replacing this placeholder
+  // 5. Test mode rules expire after 30 days. Before then, go to Firestore → Rules and set:
+  //      allow read, write: if true;
+  //    for the shuttleEvents collection (fine for a short event; nothing sensitive is stored beyond names).
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyAguMsCqZUv7uR7ynEmkF4-9Br8q4i2b6Q",
+    authDomain: "conference-shuttle-check-in.firebaseapp.com",
+    projectId: "conference-shuttle-check-in",
+    storageBucket: "conference-shuttle-check-in.firebasestorage.app",
+    messagingSenderId: "776056185305",
+    appId: "1:776056185305:web:0c66173debf886a5a3f9c8"
+  };
+
+  const isConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('PASTE_');
+  let eventDocRef = null;
+  if(isConfigured){
+    firebase.initializeApp(firebaseConfig);
+    eventDocRef = firebase.firestore().collection('shuttleEvents').doc('current-event');
+  } else {
+    document.getElementById('config-banner').classList.remove('hidden');
+  }
+
+  function genId(){
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for(let i=0;i<6;i++) code += chars[Math.floor(Math.random()*chars.length)];
+    return code;
+  }
+
+  function shuttleLetters(n){
+    const out = [];
+    for(let i=0;i<n;i++) out.push(String.fromCharCode(65+i));
+    return out;
+  }
+
+  function getShuttleCount(){
+    return Math.max(1, parseInt(el('shuttle-count').value || '3', 10));
+  }
+
+  async function saveRoster(){
+    if(!isConfigured) return;
+    try{ await eventDocRef.set({ roster }, { merge: true }); }
+    catch(e){ console.error('Failed to save roster', e); }
+  }
+
+  async function saveCheckins(){
+    if(!isConfigured) return;
+    try{ await eventDocRef.set({ checkins }, { merge: true }); }
+    catch(e){ console.error('Failed to save checkins', e); }
+  }
+
+  function onRemoteUpdate(data){
+    roster = (data && data.roster) || [];
+    checkins = (data && data.checkins) || {};
+    const activeTab = document.querySelector('.tab.active').dataset.tab;
+    renderRosterPreview();
+    if(activeTab === 'passes') renderPasses();
+    if(activeTab === 'checkin') renderCheckinList();
+    if(activeTab === 'dashboard') renderDashboard();
+  }
+
+  // ---- Tabs ----
+  document.querySelectorAll('.tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c=>c.classList.add('hidden'));
+      btn.classList.add('active');
+      el('tab-'+btn.dataset.tab).classList.remove('hidden');
+      if(btn.dataset.tab === 'passes') renderPasses();
+      if(btn.dataset.tab === 'checkin') renderCheckin();
+      if(btn.dataset.tab === 'dashboard') renderDashboard();
+    });
+  });
+
+  // ---- Setup ----
+  el('build-roster-btn').addEventListener('click', async ()=>{
+    const names = el('names-input').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(names.length === 0){ el('setup-status').textContent = 'Add at least one name first.'; return; }
+    const shuttleN = getShuttleCount();
+    const existingIds = new Set(roster.map(r=>r.id));
+    roster = names.map((name)=>{
+      let id = genId();
+      while(existingIds.has(id)){ id = genId(); }
+      existingIds.add(id);
+      return { id, name };
+    });
+    checkins = {};
+    await saveRoster();
+    await saveCheckins();
+    el('setup-status').textContent = `Roster built: ${roster.length} attendees. Tracking ${shuttleN} shuttle(s) — first come, first served.`;
+    renderRosterPreview();
+  });
+
+  el('add-more-btn').addEventListener('click', async ()=>{
+    const names = el('names-input').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(names.length === 0){ el('setup-status').textContent = 'Add at least one name first.'; return; }
+    const existingIds = new Set(roster.map(r=>r.id));
+    names.forEach(name=>{
+      let id = genId();
+      while(existingIds.has(id)){ id = genId(); }
+      existingIds.add(id);
+      roster.push({ id, name });
+    });
+    await saveRoster();
+    el('setup-status').textContent = `Added ${names.length}. Roster now has ${roster.length} attendees.`;
+    el('names-input').value = '';
+    renderRosterPreview();
+  });
+
+  function renderRosterPreview(){
+    if(roster.length === 0){ el('roster-preview-card').style.display = 'none'; return; }
+    el('roster-preview-card').style.display = 'block';
+    let html = '<div>';
+    roster.forEach(r=>{
+      const done = !!checkins[r.id];
+      html += `<div class="attendee-row">
+        <div>
+          <div class="attendee-name">${escapeHtml(r.name)}</div>
+          <div class="attendee-meta">${r.id}</div>
+        </div>
+        <span class="attendee-meta">${done ? 'Boarded · Shuttle ' + checkins[r.id].shuttle : 'Not boarded'}</span>
+      </div>`;
+    });
+    html += '</div>';
+    el('roster-table').innerHTML = html;
+  }
+
+  el('reset-btn').addEventListener('click', async ()=>{
+    if(!confirm('This clears the roster and all check-ins for everyone viewing this event. Continue?')) return;
+    roster = [];
+    checkins = {};
+    await saveRoster();
+    await saveCheckins();
+    el('roster-preview-card').style.display = 'none';
+    el('setup-status').textContent = 'Event data reset.';
+    renderPasses(); renderCheckin(); renderDashboard();
+  });
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---- Passes ----
+  function renderPasses(){
+    const grid = el('pass-grid');
+    grid.innerHTML = '';
+    if(roster.length === 0){
+      grid.innerHTML = '<p class="muted">Build a roster in the Setup tab first.</p>';
+      return;
+    }
+    roster.forEach(r=>{
+      const pass = document.createElement('div');
+      pass.className = 'pass';
+      pass.innerHTML = `
+        <div class="pass-top">
+          <div class="pass-eyebrow">Boarding Pass</div>
+          <div class="pass-name">${escapeHtml(r.name)}</div>
+          <div class="pass-shuttle">Any shuttle · first come, first served</div>
+        </div>
+        <div class="pass-bottom">
+          <div class="qr" id="qr-${r.id}"></div>
+          <div class="pass-code">${r.id}</div>
+        </div>`;
+      grid.appendChild(pass);
+      try{
+        new QRCode(document.getElementById('qr-'+r.id), { text: r.id, width: 120, height: 120 });
+      }catch(e){ console.error('QR render failed', e); }
+    });
+  }
+
+  el('print-btn').addEventListener('click', ()=> window.print());
+
+  // ---- Check-in ----
+  function populateShuttleActive(){
+    const sel = el('checkin-shuttle-active');
+    const letters = shuttleLetters(getShuttleCount());
+    const current = sel.value;
+    sel.innerHTML = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
+    if(letters.includes(current)) sel.value = current;
+  }
+
+  function activeShuttle(){
+    return el('checkin-shuttle-active').value;
+  }
+
+  function renderCheckin(){
+    populateShuttleActive();
+    renderCheckinList();
+  }
+
+  el('checkin-search').addEventListener('input', renderCheckinList);
+  el('show-boarded-toggle').addEventListener('change', renderCheckinList);
+
+  function renderCheckinList(){
+    const q = el('checkin-search').value.trim().toLowerCase();
+    const showBoarded = el('show-boarded-toggle').checked;
+    let list = roster.filter(r => showBoarded || !checkins[r.id]);
+    if(q) list = list.filter(r => r.name.toLowerCase().includes(q));
+    list = list.slice().sort((a,b)=> a.name.localeCompare(b.name));
+    const container = el('checkin-list');
+    if(list.length === 0){ container.innerHTML = '<p class="muted">Everyone matching this search has boarded.</p>'; return; }
+    container.innerHTML = list.map(r=>{
+      const done = !!checkins[r.id];
+      return `<div class="attendee-row">
+        <div>
+          <div class="attendee-name">${escapeHtml(r.name)}</div>
+          <div class="attendee-meta">${done ? 'Boarded Shuttle ' + checkins[r.id].shuttle + ' · ' + new Date(checkins[r.id].time).toLocaleTimeString() : 'Not boarded'}</div>
+        </div>
+        <button class="check-btn ${done?'done':'pending'}" data-id="${r.id}">${done ? 'Undo' : 'Check In'}</button>
+      </div>`;
+    }).join('');
+    container.querySelectorAll('.check-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=> toggleCheckin(btn.dataset.id));
+    });
+  }
+
+  async function toggleCheckin(id){
+    if(checkins[id]){
+      delete checkins[id];
+    } else {
+      checkins[id] = { time: Date.now(), shuttle: activeShuttle() };
+    }
+    await saveCheckins();
+    renderCheckinList();
+  }
+
+  function showFlash(msg, type){
+    const area = el('flash-area');
+    area.innerHTML = `<div class="flash ${type}">${msg}</div>`;
+    setTimeout(()=>{ area.innerHTML=''; }, 3000);
+  }
+
+  el('toggle-scan-btn').addEventListener('click', async ()=>{
+    if(scanning){
+      try{ await html5QrCode.stop(); }catch(e){}
+      el('scan-box').classList.add('hidden');
+      el('toggle-scan-btn').textContent = 'Start Camera Scan';
+      scanning = false;
+      return;
+    }
+    el('scan-box').classList.remove('hidden');
+    try{
+      html5QrCode = new Html5Qrcode('reader');
+      await html5QrCode.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: 220 },
+        async (decodedText)=>{
+          const code = decodedText.trim().toUpperCase();
+          const r = roster.find(x=>x.id === code);
+          if(!r){ showFlash('Code not recognized: ' + code, 'warn'); return; }
+          if(checkins[r.id]){ showFlash(r.name + ' already checked in — Shuttle ' + checkins[r.id].shuttle, 'warn'); return; }
+          const shuttle = activeShuttle();
+          checkins[r.id] = { time: Date.now(), shuttle };
+          await saveCheckins();
+          showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok');
+          renderCheckinList();
+        },
+        ()=>{}
+      );
+      el('toggle-scan-btn').textContent = 'Stop Camera Scan';
+      scanning = true;
+    }catch(e){
+      showFlash('Camera unavailable in this preview — use the tap-to-check-in list below.', 'warn');
+      el('scan-box').classList.add('hidden');
+    }
+  });
+
+  // ---- Dashboard ----
+  function renderDashboard(){
+    if(roster.length === 0){
+      el('flip-grid').innerHTML = '<p class="muted">Build a roster in the Setup tab first.</p>';
+      el('missing-list').innerHTML = '';
+      return;
+    }
+    const letters = shuttleLetters(getShuttleCount());
+    const grid = el('flip-grid');
+    let html = '';
+    letters.forEach(l=>{
+      const boarded = Object.values(checkins).filter(c=>c.shuttle===l).length;
+      html += `<div class="flip-card">
+        <div class="flip-label">Shuttle ${l}</div>
+        <div class="flip-value">${boarded}</div>
+      </div>`;
+    });
+    const totalAll = roster.length;
+    const boardedAll = roster.filter(r=>checkins[r.id]).length;
+    html += `<div class="flip-card">
+      <div class="flip-label">Total Boarded</div>
+      <div class="flip-value total">${boardedAll}<span style="font-size:18px;color:var(--ink-soft);"> / ${totalAll}</span></div>
+    </div>`;
+    grid.innerHTML = html;
+
+    const missing = roster.filter(r=>!checkins[r.id]).sort((a,b)=>a.name.localeCompare(b.name));
+    const missingEl = el('missing-list');
+    if(missing.length === 0){
+      missingEl.innerHTML = '<p class="muted">Everyone is accounted for.</p>';
+    } else {
+      missingEl.innerHTML = missing.map(r=>`<div class="attendee-row">
+        <div>
+          <div class="attendee-name">${escapeHtml(r.name)}</div>
+        </div>
+      </div>`).join('');
+    }
+  }
+
+  // ---- Live sync from Firestore (fires immediately on load, then on every change from any device) ----
+  if(isConfigured){
+    eventDocRef.onSnapshot(
+      doc => onRemoteUpdate(doc.data()),
+      err => { console.error('Firestore sync error', err); document.getElementById('config-banner').classList.remove('hidden'); }
+    );
+  } else {
+    renderRosterPreview();
+    renderDashboard();
+  }
+})();
+</script>

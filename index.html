@@ -271,7 +271,7 @@ Alex Kim
     <div id="tab-passes" class="tab-content hidden">
       <div class="card">
         <h2>Boarding passes</h2>
-        <p class="muted" style="margin-top:-6px;">Each attendee gets 4 identical passes — one labeled per trip, so everyone can carry one for each ride. Any copy scans as valid for any trip. The code below the QR also works for manual entry.</p>
+        <p class="muted" style="margin-top:-6px;">One pass per attendee — the same code is valid for all 4 trips. Captains pick the correct trip from a dropdown before scanning, so this one code checks in independently each time. The code below the QR also works for manual entry.</p>
         <button class="btn secondary" id="print-btn">Print All</button>
       </div>
       <div id="print-area">
@@ -500,25 +500,23 @@ Alex Kim
       return;
     }
     roster.forEach(r=>{
-      SESSIONS.forEach(sess=>{
-        const domId = 'qr-' + r.id + '-' + sess.id;
-        const pass = document.createElement('div');
-        pass.className = 'pass';
-        pass.innerHTML = `
-          <div class="pass-top">
-            <div class="pass-eyebrow">Boarding Pass · ${sess.label}</div>
-            <div class="pass-name">${escapeHtml(r.name)}</div>
-            <div class="pass-shuttle">Any shuttle · first come, first served</div>
-          </div>
-          <div class="pass-bottom">
-            <div class="qr" id="${domId}"></div>
-            <div class="pass-code">${r.id}</div>
-          </div>`;
-        grid.appendChild(pass);
-        try{
-          new QRCode(document.getElementById(domId), { text: r.id, width: 120, height: 120 });
-        }catch(e){ console.error('QR render failed', e); }
-      });
+      const domId = 'qr-' + r.id;
+      const pass = document.createElement('div');
+      pass.className = 'pass';
+      pass.innerHTML = `
+        <div class="pass-top">
+          <div class="pass-eyebrow">Boarding Pass</div>
+          <div class="pass-name">${escapeHtml(r.name)}</div>
+          <div class="pass-shuttle">Valid for all 4 trips · first come, first served</div>
+        </div>
+        <div class="pass-bottom">
+          <div class="qr" id="${domId}"></div>
+          <div class="pass-code">${r.id}</div>
+        </div>`;
+      grid.appendChild(pass);
+      try{
+        new QRCode(document.getElementById(domId), { text: r.id, width: 120, height: 120 });
+      }catch(e){ console.error('QR render failed', e); }
     });
   }
 
@@ -706,3 +704,4 @@ Alex Kim
   }
 })();
 </script>
+

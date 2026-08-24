@@ -237,7 +237,7 @@
     <div id="tab-setup" class="tab-content">
       <div class="card">
         <h2>1 · Build the roster</h2>
-        <p class="muted" style="margin-top:-6px;">Paste one attendee name per line. Boarding is first come, first served — nobody is pre-assigned to a shuttle; captains just log which shuttle each person actually gets on.</p>
+        <p class="muted" style="margin-top:-6px;">Paste one attendee name per line. Boarding is first come, first served — nobody is pre-assigned to a shuttle; drivers just log which shuttle each person actually gets on.</p>
         <label for="names-input">Attendee names</label>
         <textarea id="names-input" placeholder="Jane Doe
 Sam Patel
@@ -271,7 +271,7 @@ Alex Kim
     <div id="tab-passes" class="tab-content hidden">
       <div class="card">
         <h2>Boarding passes</h2>
-        <p class="muted" style="margin-top:-6px;">One pass per attendee — the same code is valid for all 4 trips. Captains pick the correct trip from a dropdown before scanning, so this one code checks in independently each time. The code below the QR also works for manual entry.</p>
+        <p class="muted" style="margin-top:-6px;">One pass per attendee — the same code is valid for all 4 trips. Drivers pick the correct trip from a dropdown before scanning, so this one code checks in independently each time. The code below the QR also works for manual entry.</p>
         <button class="btn secondary" id="print-btn">Print All</button>
       </div>
       <div id="print-area">
@@ -282,7 +282,7 @@ Alex Kim
     <!-- CHECKIN TAB -->
     <div id="tab-checkin" class="tab-content hidden">
       <div class="card">
-        <h2>This captain is boarding</h2>
+        <h2>This driver is boarding</h2>
         <p class="muted" style="margin-top:-6px;">Set the trip and shuttle once. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all 4 trips.</p>
         <div class="row">
           <select id="checkin-session-active" style="margin-bottom:0; width:auto;"></select>

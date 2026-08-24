@@ -237,7 +237,7 @@
     <div id="tab-setup" class="tab-content">
       <div class="card">
         <h2>1 · Build Passenger List</h2>
-        <p class="muted" style="margin-top:-6px;">Paste one attendee name per line. Boarding is first come, first served — nobody is pre-assigned to a shuttle; drivers just log which shuttle each person actually gets on.</p>
+        <p class="muted" style="margin-top:-6px;">Paste one attendee name per line. Boarding is first come, first served — unless assigned to a shuttle; drivers just log which shuttle each person actually gets on.</p>
         <label for="names-input">Attendee names</label>
         <textarea id="names-input" placeholder="Jane Doe
 Sam Patel
@@ -249,14 +249,14 @@ Alex Kim
             <input type="number" id="shuttle-count" min="1" max="10" value="3">
           </div>
           <button class="btn" id="build-roster-btn">Build Roster</button>
-          <button class="btn secondary" id="add-more-btn">Add Names to Existing List</button>
+          <button class="btn secondary" id="add-more-btn">Add Names to Existing Roster</button>
         </div>
         <p class="muted" id="setup-status"></p>
       </div>
 
       <div class="card" id="roster-preview-card" style="display:none;">
         <h2>2 · Roster</h2>
-        <p class="muted" style="margin-top:-6px;">Everyone below gets a QR boarding pass in the next tab. Shuttle is recorded when they check in, not before.</p>
+        <p class="muted" style="margin-top:-6px;">Everyone below gets one QR boarding pass, valid on all trips by default. Optionally lock someone to a specific trip using the dropdown — drivers will see a mismatch warning if they scan in on the wrong one. Which shuttle bus they board is still first come, first served.</p>
         <div id="roster-table"></div>
       </div>
 
@@ -271,7 +271,7 @@ Alex Kim
     <div id="tab-passes" class="tab-content hidden">
       <div class="card">
         <h2>Boarding passes</h2>
-        <p class="muted" style="margin-top:-6px;">One pass per attendee — the same code is valid for all 4 trips. Drivers pick the correct trip from a dropdown before scanning, so this one code checks in independently each time. The code below the QR also works for manual entry.</p>
+        <p class="muted" style="margin-top:-6px;">One pass per attendee — the same code is valid for all trips. Drivers pick the correct trip from a dropdown before scanning, so this one code checks in independently each time. The code below the QR also works for manual entry.</p>
         <button class="btn secondary" id="print-btn">Print All</button>
       </div>
       <div id="print-area">
@@ -283,7 +283,7 @@ Alex Kim
     <div id="tab-checkin" class="tab-content hidden">
       <div class="card">
         <h2>This driver is boarding</h2>
-        <p class="muted" style="margin-top:-6px;">Set the trip and shuttle once. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all 4 trips.</p>
+        <p class="muted" style="margin-top:-6px;">Set the trip and shuttle once. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all trips.</p>
         <div class="row">
           <select id="checkin-session-active" style="margin-bottom:0; width:auto;"></select>
           <select id="checkin-shuttle-active" style="margin-bottom:0; width:auto;"></select>
@@ -314,7 +314,7 @@ Alex Kim
       </div>
       <div class="flip-grid" id="flip-grid"></div>
       <div class="card">
-        <h2>Not yet boarded on this trip</h2>
+        <h2>Not yet boarded (expected this trip)</h2>
         <div id="missing-list" class="missing-list"></div>
       </div>
     </div>
@@ -389,7 +389,7 @@ Alex Kim
   async function saveRoster(){
     if(!isConfigured) return;
     try{ await eventDocRef.set({ roster }, { merge: true }); }
-    catch(e){ console.error('Failed to save roster', e); }
+    catch(e){ console.error('Failed to save list', e); }
   }
 
   async function saveCheckins(){
@@ -461,23 +461,32 @@ Alex Kim
     if(roster.length === 0){ el('roster-preview-card').style.display = 'none'; return; }
     el('roster-preview-card').style.display = 'block';
     const tripsBoarded = r => SESSIONS.filter(s => checkins[checkinKey(s.id, r.id)]).length;
+    const sessionOptions = '<option value="">Any trip</option>' + SESSIONS.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
     let html = '<div>';
     roster.forEach(r=>{
       const n = tripsBoarded(r);
       html += `<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>
-          <div class="attendee-meta">${r.id}</div>
+          <div class="attendee-meta">${r.id} · ${n > 0 ? n + ' of 4 trips boarded' : 'not boarded yet'}</div>
         </div>
-        <span class="attendee-meta">${n > 0 ? n + ' of 4 trips boarded' : 'Not boarded yet'}</span>
+        <select data-id="${r.id}" class="assign-select" style="margin-bottom:0; width:auto;">${sessionOptions}</select>
       </div>`;
     });
     html += '</div>';
     el('roster-table').innerHTML = html;
+    document.querySelectorAll('.assign-select').forEach(sel=>{
+      const r = roster.find(x=>x.id === sel.dataset.id);
+      if(r && r.assignedSession) sel.value = r.assignedSession;
+      sel.addEventListener('change', async ()=>{
+        const rr = roster.find(x=>x.id === sel.dataset.id);
+        if(rr){ rr.assignedSession = sel.value || null; await saveRoster(); }
+      });
+    });
   }
 
   el('reset-btn').addEventListener('click', async ()=>{
-    if(!confirm('This clears the list and all check-ins for everyone viewing this event. Continue?')) return;
+    if(!confirm('This clears the passenger and all check-ins for everyone viewing this event. Continue?')) return;
     roster = [];
     checkins = {};
     await saveRoster();
@@ -496,7 +505,7 @@ Alex Kim
     const grid = el('pass-grid');
     grid.innerHTML = '';
     if(roster.length === 0){
-      grid.innerHTML = '<p class="muted">Build a list in the Setup tab first.</p>';
+      grid.innerHTML = '<p class="muted">Build a roster in the Setup tab first.</p>';
       return;
     }
     roster.forEach(r=>{
@@ -507,7 +516,7 @@ Alex Kim
         <div class="pass-top">
           <div class="pass-eyebrow">Boarding Pass</div>
           <div class="pass-name">${escapeHtml(r.name)}</div>
-          <div class="pass-shuttle">Valid for all trips · first come, first served</div>
+          <div class="pass-shuttle">Valid for all trips · first come, first served unless assigned</div>
         </div>
         <div class="pass-bottom">
           <div class="qr" id="${domId}"></div>
@@ -557,9 +566,14 @@ Alex Kim
   el('show-boarded-toggle').addEventListener('change', renderCheckinList);
   el('checkin-session-active').addEventListener('change', renderCheckinList);
 
+  function sessionLabel(id){
+    const s = SESSIONS.find(x=>x.id===id);
+    return s ? s.label : id;
+  }
+
   function renderCheckinList(){
     if(!dataLoaded){
-      el('checkin-list').innerHTML = '<p class="muted">Loading roster from the shared database — wait a moment before scanning.</p>';
+      el('checkin-list').innerHTML = '<p class="muted">Loading passenger list from the shared database — wait a moment before scanning.</p>';
       return;
     }
     const q = el('checkin-search').value.trim().toLowerCase();
@@ -573,10 +587,13 @@ Alex Kim
     container.innerHTML = list.map(r=>{
       const key = checkinKey(session, r.id);
       const done = !!checkins[key];
+      const mismatch = r.assignedSession && r.assignedSession !== session;
+      let meta = done ? 'Boarded Shuttle ' + checkins[key].shuttle + ' · ' + new Date(checkins[key].time).toLocaleTimeString() : 'Not boarded this trip';
+      if(mismatch) meta += ' · <span style="color:var(--red);">Assigned to ' + sessionLabel(r.assignedSession) + '</span>';
       return `<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>
-          <div class="attendee-meta">${done ? 'Boarded Shuttle ' + checkins[key].shuttle + ' · ' + new Date(checkins[key].time).toLocaleTimeString() : 'Not boarded this trip'}</div>
+          <div class="attendee-meta">${meta}</div>
         </div>
         <button class="check-btn ${done?'done':'pending'}" data-id="${r.id}">${done ? 'Undo' : 'Check In'}</button>
       </div>`;
@@ -605,7 +622,7 @@ Alex Kim
 
   el('toggle-scan-btn').addEventListener('click', async ()=>{
     if(!dataLoaded){
-      showFlash('Still loading roster — try again in a second.', 'warn');
+      showFlash('Still loading list — try again in a second.', 'warn');
       return;
     }
     if(scanning){
@@ -625,12 +642,18 @@ Alex Kim
           const code = decodedText.trim().toUpperCase();
           const r = roster.find(x=>x.id === code);
           if(!r){ showFlash('Code not recognized: ' + code, 'warn'); return; }
-          const key = checkinKey(activeSession(), r.id);
+          const session = activeSession();
+          const key = checkinKey(session, r.id);
           if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn'); return; }
+          if(r.assignedSession && r.assignedSession !== session){
+            showFlash(r.name + ' is assigned to ' + sessionLabel(r.assignedSession) + ', not this trip — checking in anyway', 'warn');
+          }
           const shuttle = activeShuttle();
           checkins[key] = { time: Date.now(), shuttle };
           await saveCheckins();
-          showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok');
+          if(!r.assignedSession || r.assignedSession === session){
+            showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok');
+          }
           renderCheckinList();
         },
         ()=>{}
@@ -648,7 +671,7 @@ Alex Kim
     populateSessionSelects();
     el('dashboard-session-select').onchange = renderDashboard;
     if(roster.length === 0){
-      el('flip-grid').innerHTML = '<p class="muted">Build a roster in the Setup tab first.</p>';
+      el('flip-grid').innerHTML = '<p class="muted">Build a passenger list in the Setup tab first.</p>';
       el('missing-list').innerHTML = '';
       return;
     }
@@ -679,14 +702,16 @@ Alex Kim
     </div>`;
     grid.innerHTML = html;
 
-    const missing = roster.filter(r=>!checkins[checkinKey(session, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
+    const expected = roster.filter(r => !r.assignedSession || r.assignedSession === session);
+    const missing = expected.filter(r=>!checkins[checkinKey(session, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
     const missingEl = el('missing-list');
     if(missing.length === 0){
-      missingEl.innerHTML = '<p class="muted">Everyone is accounted for on this trip.</p>';
+      missingEl.innerHTML = '<p class="muted">Everyone expected on this trip is accounted for.</p>';
     } else {
       missingEl.innerHTML = missing.map(r=>`<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>
+          ${r.assignedSession ? `<div class="attendee-meta">Assigned to ${sessionLabel(r.assignedSession)}</div>` : ''}
         </div>
       </div>`).join('');
     }
@@ -704,4 +729,3 @@ Alex Kim
   }
 })();
 </script>
-

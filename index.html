@@ -236,7 +236,7 @@
     <!-- SETUP TAB -->
     <div id="tab-setup" class="tab-content">
       <div class="card">
-        <h2>1 · Build the roster</h2>
+        <h2>1 · Build Passenger List</h2>
         <p class="muted" style="margin-top:-6px;">Paste one attendee name per line. Boarding is first come, first served — nobody is pre-assigned to a shuttle; drivers just log which shuttle each person actually gets on.</p>
         <label for="names-input">Attendee names</label>
         <textarea id="names-input" placeholder="Jane Doe
@@ -249,7 +249,7 @@ Alex Kim
             <input type="number" id="shuttle-count" min="1" max="10" value="3">
           </div>
           <button class="btn" id="build-roster-btn">Build Roster</button>
-          <button class="btn secondary" id="add-more-btn">Add Names to Existing Roster</button>
+          <button class="btn secondary" id="add-more-btn">Add Names to Existing List</button>
         </div>
         <p class="muted" id="setup-status"></p>
       </div>
@@ -262,7 +262,7 @@ Alex Kim
 
       <div class="card">
         <h2>Reset</h2>
-        <p class="muted" style="margin-top:-6px;">Clears the roster and all check-ins for everyone on this event. Use between events, not during one.</p>
+        <p class="muted" style="margin-top:-6px;">Clears the list and all check-ins for everyone on this event. Use between events, not during one.</p>
         <button class="btn danger" id="reset-btn">Reset Event Data</button>
       </div>
     </div>
@@ -477,7 +477,7 @@ Alex Kim
   }
 
   el('reset-btn').addEventListener('click', async ()=>{
-    if(!confirm('This clears the roster and all check-ins for everyone viewing this event. Continue?')) return;
+    if(!confirm('This clears the list and all check-ins for everyone viewing this event. Continue?')) return;
     roster = [];
     checkins = {};
     await saveRoster();
@@ -496,7 +496,7 @@ Alex Kim
     const grid = el('pass-grid');
     grid.innerHTML = '';
     if(roster.length === 0){
-      grid.innerHTML = '<p class="muted">Build a roster in the Setup tab first.</p>';
+      grid.innerHTML = '<p class="muted">Build a list in the Setup tab first.</p>';
       return;
     }
     roster.forEach(r=>{
@@ -507,7 +507,7 @@ Alex Kim
         <div class="pass-top">
           <div class="pass-eyebrow">Boarding Pass</div>
           <div class="pass-name">${escapeHtml(r.name)}</div>
-          <div class="pass-shuttle">Valid for all 4 trips · first come, first served</div>
+          <div class="pass-shuttle">Valid for all trips · first come, first served</div>
         </div>
         <div class="pass-bottom">
           <div class="qr" id="${domId}"></div>

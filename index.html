@@ -662,8 +662,16 @@ Alex Kim
   function populateDriverSelect(){
     const sel = el('checkin-driver-active');
     const current = sel.value;
-    sel.innerHTML = '<option value="">— Select Driver —</option>' + drivers.map(d=>`<option value="${d.id}">${escapeHtml(d.name)} (Shuttle ${d.shuttle})</option>`).join('');
-    if(drivers.some(d=>d.id===current)) sel.value = current;
+    const session = activeSession();
+    const available = session ? drivers.filter(d => !isShuttleClosed(session, d.shuttle)) : drivers;
+    sel.innerHTML = '<option value="">— Select Driver —</option>' + available.map(d=>`<option value="${d.id}">${escapeHtml(d.name)} (Shuttle ${d.shuttle})</option>`).join('');
+    if(available.some(d=>d.id===current)){
+      sel.value = current;
+    } else if(current){
+      // The previously selected driver just closed out (or their shuttle closed) — clear the selection
+      // rather than silently leaving a stale value the driver would have to notice and fix themselves.
+      sel.value = '';
+    }
   }
 
   el('checkin-driver-active').addEventListener('change', ()=>{
@@ -770,6 +778,7 @@ Alex Kim
   el('show-boarded-toggle').addEventListener('change', renderCheckinList);
   el('checkin-session-active').addEventListener('change', ()=>{
     populateShuttleActive();
+    populateDriverSelect();
     const driverId = el('checkin-driver-active').value;
     if(driverId){
       const d = drivers.find(x=>x.id===driverId);
@@ -887,6 +896,7 @@ Alex Kim
       scanning = false;
     }
     populateSessionSelects();
+    populateDriverSelect();
     renderCheckinList();
     renderLiveCounter();
     showFlash(`Shuttle ${shuttle} closed for ${sessionLabel(session)}.`, 'warn');

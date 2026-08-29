@@ -222,6 +222,22 @@
   }
   #config-banner a{ color: var(--navy); }
 
+  /* Trip-complete review modal */
+  .modal-overlay{
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display:flex; align-items:center; justify-content:center; z-index: 1000; padding: 20px;
+  }
+  .modal-card{
+    background: var(--navy-panel); border: 1px solid var(--navy-panel-2); border-radius: 12px;
+    max-width: 480px; width: 100%; max-height: 85vh; display:flex; flex-direction:column;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .modal-header{ padding: 20px 20px 12px 20px; border-bottom: 1px solid var(--navy-panel-2); }
+  .modal-header .eyebrow{ margin-bottom: 6px; }
+  .modal-header h3{ margin:0; font-size: 18px; }
+  .modal-body{ padding: 16px 20px; overflow-y: auto; }
+  .modal-footer{ padding: 14px 20px; border-top: 1px solid var(--navy-panel-2); text-align:right; }
+
   @media print{
     body *{ visibility: hidden; }
     #print-area, #print-area *{ visibility: visible; }
@@ -376,6 +392,19 @@ Alex Kim
     </div>
 
 
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="trip-review-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <p class="eyebrow">Trip Complete</p>
+      <h3 id="trip-review-title">All shuttles closed</h3>
+    </div>
+    <div class="modal-body" id="trip-review-body"></div>
+    <div class="modal-footer">
+      <button class="btn" id="trip-review-close-btn">Close</button>
+    </div>
   </div>
 </div>
 
@@ -809,6 +838,29 @@ Alex Kim
     return s ? s.label : id;
   }
 
+  // ---- Trip-complete review modal ----
+  function showTripReviewModal(sessionId){
+    const missing = roster.filter(r=>!checkins[checkinKey(sessionId, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
+    el('trip-review-title').textContent = sessionLabel(sessionId) + ' — all shuttles closed';
+    const body = el('trip-review-body');
+    if(missing.length === 0){
+      body.innerHTML = '<p class="muted">Everyone on the passenger list was checked in for this trip. Nothing outstanding.</p>';
+    } else {
+      body.innerHTML = `<p class="muted" style="margin-bottom:10px;">${missing.length} of ${roster.length} on the passenger list were never scanned in for this trip:</p>` +
+        missing.map(r=>`<div class="attendee-row">
+          <div>
+            <div class="attendee-name">${escapeHtml(r.name)}</div>
+            ${r.assignedShuttle ? `<div class="attendee-meta">Assigned to Shuttle ${r.assignedShuttle}</div>` : ''}
+          </div>
+        </div>`).join('');
+    }
+    el('trip-review-modal').classList.remove('hidden');
+  }
+
+  el('trip-review-close-btn').addEventListener('click', ()=>{
+    el('trip-review-modal').classList.add('hidden');
+  });
+
   function renderCheckinList(){
     if(!dataLoaded){
       el('checkin-list').innerHTML = '<p class="muted">Loading passenger from the shared database — wait a moment before scanning.</p>';
@@ -886,6 +938,7 @@ Alex Kim
     const shuttle = activeShuttle();
     if(!session || !shuttle) return;
     if(!confirm(`Close Shuttle ${shuttle} for ${sessionLabel(session)}? You won't be able to select this shuttle for this trip again unless it's reopened from the Dashboard.`)) return;
+    const wasFullyClosed = isTripFullyClosed(session);
     closedSessions[closedKey(session, shuttle)] = true;
     await saveClosedSessions();
     if(scanning){
@@ -900,6 +953,9 @@ Alex Kim
     renderCheckinList();
     renderLiveCounter();
     showFlash(`Shuttle ${shuttle} closed for ${sessionLabel(session)}.`, 'warn');
+    if(!wasFullyClosed && isTripFullyClosed(session)){
+      showTripReviewModal(session);
+    }
   });
 
   function showFlash(msg, type, persistent){
@@ -1056,6 +1112,7 @@ Alex Kim
     closeBtn.style.display = 'inline-block';
     closeBtn.textContent = allClosed ? 'Reopen All Shuttles' : 'Close All Shuttles for This Trip';
     closeBtn.onclick = async ()=>{
+      const wasClosingAll = !allClosed; // capture intent before mutating state
       letters.forEach(l=>{
         if(allClosed){ delete closedSessions[closedKey(session, l)]; }
         else { closedSessions[closedKey(session, l)] = true; }
@@ -1063,8 +1120,12 @@ Alex Kim
       await saveClosedSessions();
       renderDashboard();
       populateSessionSelects();
+      populateDriverSelect();
       renderCheckinList();
       renderLiveCounter();
+      if(wasClosingAll){
+        showTripReviewModal(session);
+      }
     };
     el('trip-status-note').textContent = allClosed
       ? 'Every shuttle is closed for this trip — it no longer appears in the driver\u2019s trip picker.'
@@ -1095,12 +1156,17 @@ Alex Kim
       btn.addEventListener('click', async ()=>{
         const l = btn.dataset.shuttle;
         const key = closedKey(session, l);
+        const wasFullyClosed = isTripFullyClosed(session);
         if(closedSessions[key]){ delete closedSessions[key]; } else { closedSessions[key] = true; }
         await saveClosedSessions();
         renderDashboard();
         populateSessionSelects();
+        populateDriverSelect();
         renderCheckinList();
         renderLiveCounter();
+        if(!wasFullyClosed && isTripFullyClosed(session)){
+          showTripReviewModal(session);
+        }
       });
     });
 

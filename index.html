@@ -332,7 +332,11 @@ Alex Kim
     <div id="tab-dashboard" class="tab-content hidden">
       <div class="card">
         <h2>Viewing trip</h2>
-        <select id="dashboard-session-select" style="margin-bottom:0; width:auto;"></select>
+        <div class="row">
+          <select id="dashboard-session-select" style="margin-bottom:0; width:auto;"></select>
+          <button class="btn secondary" id="toggle-close-trip-btn"></button>
+        </div>
+        <p class="muted" id="trip-status-note" style="margin-top:8px;"></p>
       </div>
       <div class="flip-grid" id="flip-grid"></div>
       <div class="card">
@@ -363,6 +367,7 @@ Alex Kim
   let roster = [];      // [{id, name}]
   let checkins = {};    // {"sessionId::personId": {time, shuttle}}
   let logs = [];         // [{logId, personId, name, sessionId, shuttle, time, action, method}]
+  let closedSessions = {}; // {sessionId: true} — trips marked done, hidden from the driver's trip picker
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -438,6 +443,12 @@ Alex Kim
     catch(e){ console.error('Failed to save checkins', e); }
   }
 
+  async function saveClosedSessions(){
+    if(!isConfigured) return;
+    try{ await eventDocRef.set({ closedSessions }, { merge: true }); }
+    catch(e){ console.error('Failed to save closed sessions', e); }
+  }
+
   async function appendLog(entry){
     if(!isConfigured) return;
     try{
@@ -449,11 +460,12 @@ Alex Kim
     roster = (data && data.roster) || [];
     checkins = (data && data.checkins) || {};
     logs = (data && data.logs) || [];
+    closedSessions = (data && data.closedSessions) || {};
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
     renderRosterPreview();
     if(activeTab === 'passes') renderPasses();
-    if(activeTab === 'checkin'){ renderCheckinList(); renderLiveCounter(); }
+    if(activeTab === 'checkin'){ populateSessionSelects(); renderCheckinList(); renderLiveCounter(); }
     if(activeTab === 'dashboard') renderDashboard();
     if(activeTab === 'log') renderLog();
   }
@@ -537,13 +549,15 @@ Alex Kim
   }
 
   el('reset-btn').addEventListener('click', async ()=>{
-    if(!confirm('This clears the passenger list, all check-ins, and the scan log for everyone viewing this event. Continue?')) return;
+    if(!confirm('This clears the passenger list, all check-ins, trip open/closed status, and the scan log for everyone viewing this event. Continue?')) return;
     roster = [];
     checkins = {};
     logs = [];
+    closedSessions = {};
     lastScan = null;
     await saveRoster();
     await saveCheckins();
+    await saveClosedSessions();
     if(isConfigured){
       try{ await eventDocRef.set({ logs: [] }, { merge: true }); }catch(e){ console.error('Failed to clear log', e); }
     }
@@ -597,10 +611,27 @@ Alex Kim
   }
 
   function populateSessionSelects(){
-    [el('checkin-session-active'), el('dashboard-session-select')].forEach(sel=>{
-      if(sel.options.length === 0){
-        sel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
-      }
+    // Dashboard: always shows every trip (closed ones marked), populated once.
+    const dashSel = el('dashboard-session-select');
+    if(dashSel.options.length === 0){
+      dashSel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}${closedSessions[s.id] ? ' (closed)' : ''}</option>`).join('');
+    }
+
+    // Check-in: only open trips are selectable — rebuilt every time in case a trip just closed.
+    const checkinSel = el('checkin-session-active');
+    const openSessions = SESSIONS.filter(s => !closedSessions[s.id]);
+    const prev = checkinSel.value;
+    checkinSel.innerHTML = openSessions.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+    if(openSessions.some(s=>s.id===prev)){
+      checkinSel.value = prev;
+    }
+  }
+
+  function refreshDashboardSessionLabels(){
+    const dashSel = el('dashboard-session-select');
+    Array.from(dashSel.options).forEach(opt=>{
+      const s = SESSIONS.find(x=>x.id===opt.value);
+      if(s) opt.textContent = s.label + (closedSessions[s.id] ? ' (closed)' : '');
     });
   }
 
@@ -627,7 +658,7 @@ Alex Kim
   function renderLiveCounter(){
     const box = el('live-counter');
     if(!box) return;
-    if(!dataLoaded || roster.length === 0){ box.innerHTML = ''; return; }
+    if(!dataLoaded || roster.length === 0 || !el('checkin-session-active').value){ box.innerHTML = ''; return; }
     const session = activeSession();
     const shuttle = activeShuttle();
     const onThisShuttle = roster.filter(r => { const c = checkins[checkinKey(session, r.id)]; return c && c.shuttle === shuttle; }).length;
@@ -644,6 +675,10 @@ Alex Kim
   function renderCheckinList(){
     if(!dataLoaded){
       el('checkin-list').innerHTML = '<p class="muted">Loading passenger from the shared database — wait a moment before scanning.</p>';
+      return;
+    }
+    if(!el('checkin-session-active').value){
+      el('checkin-list').innerHTML = '<p class="muted">All trips are currently marked done. Reopen a trip from the Dashboard tab if you need to check someone in.</p>';
       return;
     }
     const q = el('checkin-search').value.trim().toLowerCase();
@@ -759,6 +794,10 @@ Alex Kim
       showFlash('Still loading roster — try again in a second.', 'warn');
       return;
     }
+    if(!el('checkin-session-active').value){
+      showFlash('All trips are currently marked done — reopen one from the Dashboard tab first.', 'warn');
+      return;
+    }
     if(scanning){
       try{ await html5QrCode.stop(); }catch(e){}
       el('scan-box').classList.add('hidden');
@@ -833,18 +872,39 @@ Alex Kim
   // ---- Dashboard ----
   function renderDashboard(){
     populateSessionSelects();
+    refreshDashboardSessionLabels();
     el('dashboard-session-select').onchange = renderDashboard;
     if(roster.length === 0){
       el('flip-grid').innerHTML = '<p class="muted">Build a passenger list in the Setup tab first.</p>';
       el('missing-list').innerHTML = '';
+      el('toggle-close-trip-btn').style.display = 'none';
+      el('trip-status-note').textContent = '';
       return;
     }
     if(!dataLoaded){
       el('flip-grid').innerHTML = '<p class="muted">Loading live data…</p>';
       el('missing-list').innerHTML = '';
+      el('toggle-close-trip-btn').style.display = 'none';
+      el('trip-status-note').textContent = '';
       return;
     }
     const session = el('dashboard-session-select').value;
+    const isClosed = !!closedSessions[session];
+    const closeBtn = el('toggle-close-trip-btn');
+    closeBtn.style.display = 'inline-block';
+    closeBtn.textContent = isClosed ? 'Reopen This Trip' : 'Mark This Trip Done';
+    closeBtn.onclick = async ()=>{
+      if(isClosed){ delete closedSessions[session]; } else { closedSessions[session] = true; }
+      await saveClosedSessions();
+      renderDashboard();
+      // Refresh the driver's dropdown immediately if they're on the Check-in tab elsewhere
+      populateSessionSelects();
+      renderCheckinList();
+      renderLiveCounter();
+    };
+    el('trip-status-note').textContent = isClosed
+      ? 'This trip is marked done — it no longer appears in the driver\u2019s trip picker on Check-In.'
+      : 'This trip is open — drivers can select it on the Check-In tab.';
     const letters = shuttleLetters(getShuttleCount());
     const grid = el('flip-grid');
     let html = '';

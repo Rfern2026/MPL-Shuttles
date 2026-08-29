@@ -280,8 +280,19 @@ Alex Kim
       </div>
 
       <div class="card">
+        <h2>3 · Drivers</h2>
+        <p class="muted" style="margin-top:-6px;">Add each driver and the shuttle they're assigned to. On the Check-In tab, drivers pick their own name and the shuttle fills in automatically. Reassign anyone here anytime — changes apply immediately everywhere.</p>
+        <div class="row">
+          <input type="text" id="driver-name-input" placeholder="Driver name" style="margin-bottom:0; flex:1; min-width:160px;">
+          <select id="driver-shuttle-input" style="margin-bottom:0; width:auto;"></select>
+          <button class="btn" id="add-driver-btn">Add Driver</button>
+        </div>
+        <div id="drivers-table" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
         <h2>Reset</h2>
-        <p class="muted" style="margin-top:-6px;">Clears the passenger list and all check-ins for everyone on this event. Use between events, not during one.</p>
+        <p class="muted" style="margin-top:-6px;">Clears the passenger list, drivers, and all check-ins for everyone on this event. Use between events, not during one.</p>
         <button class="btn danger" id="reset-btn">Reset Event Data</button>
       </div>
     </div>
@@ -302,7 +313,10 @@ Alex Kim
     <div id="tab-checkin" class="tab-content hidden">
       <div class="card">
         <h2>This Driver is boarding</h2>
-        <p class="muted" style="margin-top:-6px;">Set the trip and shuttle once. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all trips.</p>
+        <p class="muted" style="margin-top:-6px;">Pick your name to auto-fill your assigned shuttle, then set the trip. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all trips.</p>
+        <div class="row">
+          <select id="checkin-driver-active" style="margin-bottom:0; width:auto;"><option value="">— Select Driver —</option></select>
+        </div>
         <div class="row">
           <select id="checkin-session-active" style="margin-bottom:0; width:auto;"></select>
           <select id="checkin-shuttle-active" style="margin-bottom:0; width:auto;"></select>
@@ -315,7 +329,10 @@ Alex Kim
         </div>
         <div id="live-counter" class="flip-card" style="margin-bottom:14px; text-align:left; padding:12px 16px;"></div>
         <div id="flash-area"></div>
-        <button class="btn secondary" id="undo-last-btn" style="margin-top:4px;">Undo Last Scan</button>
+        <div class="row" style="margin-top:4px;">
+          <button class="btn secondary" id="undo-last-btn">Undo Last Scan</button>
+          <button class="btn danger" id="close-my-shuttle-btn">Close My Shuttle for This Trip</button>
+        </div>
       </div>
       <div class="card">
         <h2>Tap to check in</h2>
@@ -367,7 +384,8 @@ Alex Kim
   let roster = [];      // [{id, name}]
   let checkins = {};    // {"sessionId::personId": {time, shuttle}}
   let logs = [];         // [{logId, personId, name, sessionId, shuttle, time, action, method}]
-  let closedSessions = {}; // {sessionId: true} — trips marked done, hidden from the driver's trip picker
+  let closedSessions = {}; // {sessionId::shuttle: true} — shuttle+trip combos marked done
+  let drivers = [];        // [{id, name, shuttle}]
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -383,6 +401,10 @@ Alex Kim
     { id: 'd2-eve-hotel', label: 'Day 2 · Evening to Hotel' }
   ];
   const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
+  const closedKey = (sessionId, shuttle) => sessionId + '::' + shuttle;
+  const isShuttleClosed = (sessionId, shuttle) => !!closedSessions[closedKey(sessionId, shuttle)];
+  const isTripFullyClosed = (sessionId) => shuttleLettersGlobal().every(l => isShuttleClosed(sessionId, l));
+  function shuttleLettersGlobal(){ return shuttleLetters(getShuttleCount()); }
 
   const el = id => document.getElementById(id);
 
@@ -449,6 +471,12 @@ Alex Kim
     catch(e){ console.error('Failed to save closed sessions', e); }
   }
 
+  async function saveDrivers(){
+    if(!isConfigured) return;
+    try{ await eventDocRef.set({ drivers }, { merge: true }); }
+    catch(e){ console.error('Failed to save drivers', e); }
+  }
+
   async function appendLog(entry){
     if(!isConfigured) return;
     try{
@@ -461,11 +489,13 @@ Alex Kim
     checkins = (data && data.checkins) || {};
     logs = (data && data.logs) || [];
     closedSessions = (data && data.closedSessions) || {};
+    drivers = (data && data.drivers) || [];
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
     renderRosterPreview();
+    renderDriversPreview();
     if(activeTab === 'passes') renderPasses();
-    if(activeTab === 'checkin'){ populateSessionSelects(); renderCheckinList(); renderLiveCounter(); }
+    if(activeTab === 'checkin'){ populateSessionSelects(); populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }
     if(activeTab === 'dashboard') renderDashboard();
     if(activeTab === 'log') renderLog();
   }
@@ -549,15 +579,17 @@ Alex Kim
   }
 
   el('reset-btn').addEventListener('click', async ()=>{
-    if(!confirm('This clears the passenger list, all check-ins, trip open/closed status, and the scan log for everyone viewing this event. Continue?')) return;
+    if(!confirm('This clears the passenger list, drivers, all check-ins, trip open/closed status, and the scan log for everyone viewing this event. Continue?')) return;
     roster = [];
     checkins = {};
     logs = [];
     closedSessions = {};
+    drivers = [];
     lastScan = null;
     await saveRoster();
     await saveCheckins();
     await saveClosedSessions();
+    await saveDrivers();
     if(isConfigured){
       try{ await eventDocRef.set({ logs: [] }, { merge: true }); }catch(e){ console.error('Failed to clear log', e); }
     }
@@ -569,6 +601,86 @@ Alex Kim
   function escapeHtml(s){
     return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
+
+  // ---- Drivers ----
+  function populateDriverShuttleInput(){
+    const sel = el('driver-shuttle-input');
+    const letters = shuttleLetters(getShuttleCount());
+    const current = sel.value;
+    sel.innerHTML = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
+    if(letters.includes(current)) sel.value = current;
+  }
+
+  el('add-driver-btn').addEventListener('click', async ()=>{
+    populateDriverShuttleInput();
+    const name = el('driver-name-input').value.trim();
+    if(!name){ el('setup-status').textContent = 'Enter a driver name first.'; return; }
+    const shuttle = el('driver-shuttle-input').value;
+    drivers.push({ id: genId(), name, shuttle });
+    await saveDrivers();
+    el('driver-name-input').value = '';
+    renderDriversPreview();
+    populateDriverSelect();
+    el('setup-status').textContent = `Added driver ${name} on Shuttle ${shuttle}.`;
+  });
+
+  function renderDriversPreview(){
+    populateDriverShuttleInput();
+    const table = el('drivers-table');
+    if(drivers.length === 0){ table.innerHTML = '<p class="muted">No drivers added yet.</p>'; return; }
+    const letters = shuttleLetters(getShuttleCount());
+    const shuttleOptions = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
+    table.innerHTML = drivers.map(d=>`<div class="attendee-row">
+      <input type="text" data-id="${d.id}" class="driver-name-edit" value="${escapeHtml(d.name)}" style="margin-bottom:0; flex:1; min-width:120px;">
+      <select data-id="${d.id}" class="driver-shuttle-edit" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
+      <button class="btn danger driver-remove-btn" data-id="${d.id}" style="margin-left:8px;">Remove</button>
+    </div>`).join('');
+    table.querySelectorAll('.driver-shuttle-edit').forEach(sel=>{
+      const d = drivers.find(x=>x.id===sel.dataset.id);
+      if(d) sel.value = d.shuttle;
+      sel.addEventListener('change', async ()=>{
+        const dd = drivers.find(x=>x.id===sel.dataset.id);
+        if(dd){ dd.shuttle = sel.value; await saveDrivers(); populateDriverSelect(); }
+      });
+    });
+    table.querySelectorAll('.driver-name-edit').forEach(input=>{
+      input.addEventListener('change', async ()=>{
+        const dd = drivers.find(x=>x.id===input.dataset.id);
+        if(dd && input.value.trim()){ dd.name = input.value.trim(); await saveDrivers(); populateDriverSelect(); }
+      });
+    });
+    table.querySelectorAll('.driver-remove-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        drivers = drivers.filter(x=>x.id!==btn.dataset.id);
+        await saveDrivers();
+        renderDriversPreview();
+        populateDriverSelect();
+      });
+    });
+  }
+
+  function populateDriverSelect(){
+    const sel = el('checkin-driver-active');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— Select Driver —</option>' + drivers.map(d=>`<option value="${d.id}">${escapeHtml(d.name)} (Shuttle ${d.shuttle})</option>`).join('');
+    if(drivers.some(d=>d.id===current)) sel.value = current;
+  }
+
+  el('checkin-driver-active').addEventListener('change', ()=>{
+    const driverId = el('checkin-driver-active').value;
+    if(!driverId) return;
+    const d = drivers.find(x=>x.id===driverId);
+    if(!d) return;
+    populateShuttleActive();
+    const shuttleSel = el('checkin-shuttle-active');
+    const optionExists = Array.from(shuttleSel.options).some(o=>o.value===d.shuttle);
+    if(optionExists){
+      shuttleSel.value = d.shuttle;
+      renderLiveCounter();
+    } else {
+      showFlash(`${d.name}'s assigned Shuttle ${d.shuttle} is closed for this trip — pick a shuttle manually.`, 'warn');
+    }
+  });
 
   // ---- Passes ----
   function renderPasses(){
@@ -604,34 +716,37 @@ Alex Kim
   // ---- Check-in ----
   function populateShuttleActive(){
     const sel = el('checkin-shuttle-active');
+    const session = activeSession();
     const letters = shuttleLetters(getShuttleCount());
+    const openLetters = session ? letters.filter(l => !isShuttleClosed(session, l)) : letters;
     const current = sel.value;
-    sel.innerHTML = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
-    if(letters.includes(current)) sel.value = current;
+    sel.innerHTML = openLetters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
+    if(openLetters.includes(current)) sel.value = current;
   }
 
   function populateSessionSelects(){
-    // Dashboard: always shows every trip (closed ones marked), populated once.
+    // Dashboard: always shows every trip (fully-closed ones marked), populated once.
     const dashSel = el('dashboard-session-select');
     if(dashSel.options.length === 0){
-      dashSel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}${closedSessions[s.id] ? ' (closed)' : ''}</option>`).join('');
+      dashSel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}${isTripFullyClosed(s.id) ? ' (closed)' : ''}</option>`).join('');
     }
 
-    // Check-in: only open trips are selectable — rebuilt every time in case a trip just closed.
+    // Check-in: a trip is only selectable while at least one shuttle is still open for it.
     const checkinSel = el('checkin-session-active');
-    const openSessions = SESSIONS.filter(s => !closedSessions[s.id]);
+    const openSessions = SESSIONS.filter(s => !isTripFullyClosed(s.id));
     const prev = checkinSel.value;
     checkinSel.innerHTML = openSessions.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
     if(openSessions.some(s=>s.id===prev)){
       checkinSel.value = prev;
     }
+    populateShuttleActive();
   }
 
   function refreshDashboardSessionLabels(){
     const dashSel = el('dashboard-session-select');
     Array.from(dashSel.options).forEach(opt=>{
       const s = SESSIONS.find(x=>x.id===opt.value);
-      if(s) opt.textContent = s.label + (closedSessions[s.id] ? ' (closed)' : '');
+      if(s) opt.textContent = s.label + (isTripFullyClosed(s.id) ? ' (closed)' : '');
     });
   }
 
@@ -646,13 +761,26 @@ Alex Kim
   function renderCheckin(){
     populateSessionSelects();
     populateShuttleActive();
+    populateDriverSelect();
     renderCheckinList();
     renderLiveCounter();
   }
 
   el('checkin-search').addEventListener('input', renderCheckinList);
   el('show-boarded-toggle').addEventListener('change', renderCheckinList);
-  el('checkin-session-active').addEventListener('change', ()=>{ renderCheckinList(); renderLiveCounter(); });
+  el('checkin-session-active').addEventListener('change', ()=>{
+    populateShuttleActive();
+    const driverId = el('checkin-driver-active').value;
+    if(driverId){
+      const d = drivers.find(x=>x.id===driverId);
+      const shuttleSel = el('checkin-shuttle-active');
+      if(d && Array.from(shuttleSel.options).some(o=>o.value===d.shuttle)){
+        shuttleSel.value = d.shuttle;
+      }
+    }
+    renderCheckinList();
+    renderLiveCounter();
+  });
   el('checkin-shuttle-active').addEventListener('change', renderLiveCounter);
 
   function renderLiveCounter(){
@@ -742,6 +870,26 @@ Alex Kim
     } else {
       showFlash('That check-in was already removed.', 'warn');
     }
+  });
+
+  el('close-my-shuttle-btn').addEventListener('click', async ()=>{
+    const session = activeSession();
+    const shuttle = activeShuttle();
+    if(!session || !shuttle) return;
+    if(!confirm(`Close Shuttle ${shuttle} for ${sessionLabel(session)}? You won't be able to select this shuttle for this trip again unless it's reopened from the Dashboard.`)) return;
+    closedSessions[closedKey(session, shuttle)] = true;
+    await saveClosedSessions();
+    if(scanning){
+      try{ await html5QrCode.stop(); }catch(e){}
+      el('scan-box').classList.add('hidden');
+      el('scan-next-btn').style.display = 'none';
+      el('toggle-scan-btn').textContent = 'Start Camera Scan';
+      scanning = false;
+    }
+    populateSessionSelects();
+    renderCheckinList();
+    renderLiveCounter();
+    showFlash(`Shuttle ${shuttle} closed for ${sessionLabel(session)}.`, 'warn');
   });
 
   function showFlash(msg, type, persistent){
@@ -889,23 +1037,29 @@ Alex Kim
       return;
     }
     const session = el('dashboard-session-select').value;
-    const isClosed = !!closedSessions[session];
+    const letters = shuttleLetters(getShuttleCount());
+    const allClosed = isTripFullyClosed(session);
+    const anyOpen = letters.some(l => !isShuttleClosed(session, l));
+
+    // Bulk convenience toggle: close/reopen every shuttle for this trip at once.
     const closeBtn = el('toggle-close-trip-btn');
     closeBtn.style.display = 'inline-block';
-    closeBtn.textContent = isClosed ? 'Reopen This Trip' : 'Mark This Trip Done';
+    closeBtn.textContent = allClosed ? 'Reopen All Shuttles' : 'Close All Shuttles for This Trip';
     closeBtn.onclick = async ()=>{
-      if(isClosed){ delete closedSessions[session]; } else { closedSessions[session] = true; }
+      letters.forEach(l=>{
+        if(allClosed){ delete closedSessions[closedKey(session, l)]; }
+        else { closedSessions[closedKey(session, l)] = true; }
+      });
       await saveClosedSessions();
       renderDashboard();
-      // Refresh the driver's dropdown immediately if they're on the Check-in tab elsewhere
       populateSessionSelects();
       renderCheckinList();
       renderLiveCounter();
     };
-    el('trip-status-note').textContent = isClosed
-      ? 'This trip is marked done — it no longer appears in the driver\u2019s trip picker on Check-In.'
-      : 'This trip is open — drivers can select it on the Check-In tab.';
-    const letters = shuttleLetters(getShuttleCount());
+    el('trip-status-note').textContent = allClosed
+      ? 'Every shuttle is closed for this trip — it no longer appears in the driver\u2019s trip picker.'
+      : (anyOpen ? 'Tap a shuttle below to close or reopen it individually for this trip.' : '');
+
     const grid = el('flip-grid');
     let html = '';
     letters.forEach(l=>{
@@ -913,9 +1067,11 @@ Alex Kim
         const c = checkins[checkinKey(session, r.id)];
         return c && c.shuttle === l;
       }).length;
+      const closed = isShuttleClosed(session, l);
       html += `<div class="flip-card">
-        <div class="flip-label">Shuttle ${l}</div>
+        <div class="flip-label">Shuttle ${l}${closed ? ' · Closed' : ''}</div>
         <div class="flip-value">${boarded}</div>
+        <button class="btn secondary shuttle-toggle-btn" data-shuttle="${l}" style="margin-top:10px; font-size:11px; padding:8px 10px; width:100%;">${closed ? 'Reopen' : 'Close'}</button>
       </div>`;
     });
     const totalAll = roster.length;
@@ -925,6 +1081,18 @@ Alex Kim
       <div class="flip-value total">${boardedAll}<span style="font-size:18px;color:var(--ink-soft);"> / ${totalAll}</span></div>
     </div>`;
     grid.innerHTML = html;
+    grid.querySelectorAll('.shuttle-toggle-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const l = btn.dataset.shuttle;
+        const key = closedKey(session, l);
+        if(closedSessions[key]){ delete closedSessions[key]; } else { closedSessions[key] = true; }
+        await saveClosedSessions();
+        renderDashboard();
+        populateSessionSelects();
+        renderCheckinList();
+        renderLiveCounter();
+      });
+    });
 
     const missing = roster.filter(r=>!checkins[checkinKey(session, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
     const missingEl = el('missing-list');
@@ -987,6 +1155,7 @@ Alex Kim
     );
   } else {
     renderRosterPreview();
+    renderDriversPreview();
     renderDashboard();
   }
 })();

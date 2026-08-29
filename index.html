@@ -246,6 +246,7 @@
       <button class="tab" data-tab="passes">QR Codes</button>
       <button class="tab" data-tab="checkin">Check-In</button>
       <button class="tab" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="log">Log</button>
     </div>
   </div>
 
@@ -311,7 +312,9 @@ Alex Kim
           <div id="reader"></div>
           <p class="muted" style="text-align:center;">Point a boarding pass QR at the camera. If the camera doesn't work in this preview, use the tap-to-check-in list below instead.</p>
         </div>
+        <div id="live-counter" class="flip-card" style="margin-bottom:14px; text-align:left; padding:12px 16px;"></div>
         <div id="flash-area"></div>
+        <button class="btn secondary" id="undo-last-btn" style="margin-top:4px;">Undo Last Scan</button>
       </div>
       <div class="card">
         <h2>Tap to check in</h2>
@@ -337,6 +340,19 @@ Alex Kim
       </div>
     </div>
 
+    <!-- LOG TAB -->
+    <div id="tab-log" class="tab-content hidden">
+      <div class="card">
+        <h2>Scan log</h2>
+        <p class="muted" style="margin-top:-6px;">Every check-in and undo, timestamped, newest first — a full audit trail per trip.</p>
+        <div class="row">
+          <select id="log-session-filter" style="margin-bottom:0; width:auto;"><option value="all">All Trips</option></select>
+          <input type="text" id="log-search" placeholder="Search by name..." style="margin-bottom:0; width:auto; flex:1; min-width:160px;">
+        </div>
+        <div id="log-list"></div>
+      </div>
+    </div>
+
 
   </div>
 </div>
@@ -345,6 +361,7 @@ Alex Kim
 (function(){
   let roster = [];      // [{id, name}]
   let checkins = {};    // {"sessionId::personId": {time, shuttle}}
+  let logs = [];         // [{logId, personId, name, sessionId, shuttle, time, action, method}]
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -420,15 +437,24 @@ Alex Kim
     catch(e){ console.error('Failed to save checkins', e); }
   }
 
+  async function appendLog(entry){
+    if(!isConfigured) return;
+    try{
+      await eventDocRef.set({ logs: firebase.firestore.FieldValue.arrayUnion(entry) }, { merge: true });
+    }catch(e){ console.error('Failed to save log entry', e); }
+  }
+
   function onRemoteUpdate(data){
     roster = (data && data.roster) || [];
     checkins = (data && data.checkins) || {};
+    logs = (data && data.logs) || [];
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
     renderRosterPreview();
     if(activeTab === 'passes') renderPasses();
-    if(activeTab === 'checkin') renderCheckinList();
+    if(activeTab === 'checkin'){ renderCheckinList(); renderLiveCounter(); }
     if(activeTab === 'dashboard') renderDashboard();
+    if(activeTab === 'log') renderLog();
   }
 
   // ---- Tabs ----
@@ -439,8 +465,9 @@ Alex Kim
       btn.classList.add('active');
       el('tab-'+btn.dataset.tab).classList.remove('hidden');
       if(btn.dataset.tab === 'passes') renderPasses();
-      if(btn.dataset.tab === 'checkin') renderCheckin();
+      if(btn.dataset.tab === 'checkin'){ renderCheckin(); renderLiveCounter(); }
       if(btn.dataset.tab === 'dashboard') renderDashboard();
+      if(btn.dataset.tab === 'log') renderLog();
     });
   });
 
@@ -509,14 +536,19 @@ Alex Kim
   }
 
   el('reset-btn').addEventListener('click', async ()=>{
-    if(!confirm('This clears the passenger list and all check-ins for everyone viewing this event. Continue?')) return;
+    if(!confirm('This clears the passenger list, all check-ins, and the scan log for everyone viewing this event. Continue?')) return;
     roster = [];
     checkins = {};
+    logs = [];
+    lastScan = null;
     await saveRoster();
     await saveCheckins();
+    if(isConfigured){
+      try{ await eventDocRef.set({ logs: [] }, { merge: true }); }catch(e){ console.error('Failed to clear log', e); }
+    }
     el('roster-preview-card').style.display = 'none';
     el('setup-status').textContent = 'Event data reset.';
-    renderPasses(); renderCheckin(); renderDashboard();
+    renderPasses(); renderCheckin(); renderDashboard(); renderLog();
   });
 
   function escapeHtml(s){
@@ -583,11 +615,25 @@ Alex Kim
     populateSessionSelects();
     populateShuttleActive();
     renderCheckinList();
+    renderLiveCounter();
   }
 
   el('checkin-search').addEventListener('input', renderCheckinList);
   el('show-boarded-toggle').addEventListener('change', renderCheckinList);
-  el('checkin-session-active').addEventListener('change', renderCheckinList);
+  el('checkin-session-active').addEventListener('change', ()=>{ renderCheckinList(); renderLiveCounter(); });
+  el('checkin-shuttle-active').addEventListener('change', renderLiveCounter);
+
+  function renderLiveCounter(){
+    const box = el('live-counter');
+    if(!box) return;
+    if(!dataLoaded || roster.length === 0){ box.innerHTML = ''; return; }
+    const session = activeSession();
+    const shuttle = activeShuttle();
+    const onThisShuttle = roster.filter(r => { const c = checkins[checkinKey(session, r.id)]; return c && c.shuttle === shuttle; }).length;
+    const totalThisTrip = roster.filter(r => checkins[checkinKey(session, r.id)]).length;
+    box.innerHTML = `<div class="flip-label">Shuttle ${shuttle} · ${sessionLabel(session)}</div>
+      <div class="flip-value" style="font-size:26px;">${onThisShuttle}<span style="font-size:14px;color:var(--ink-soft);"> on this shuttle · ${totalThisTrip} total this trip</span></div>`;
+  }
 
   function sessionLabel(id){
     const s = SESSIONS.find(x=>x.id===id);
@@ -622,20 +668,45 @@ Alex Kim
       </div>`;
     }).join('');
     container.querySelectorAll('.check-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=> toggleCheckin(btn.dataset.id));
+      btn.addEventListener('click', ()=> toggleCheckin(btn.dataset.id, 'tap'));
     });
   }
 
-  async function toggleCheckin(id){
-    const key = checkinKey(activeSession(), id);
+  let lastScan = null; // { id, name, session, shuttle }
+
+  async function toggleCheckin(id, method){
+    const session = activeSession();
+    const key = checkinKey(session, id);
+    const person = roster.find(r=>r.id===id);
     if(checkins[key]){
       delete checkins[key];
+      appendLog({ logId: genId()+Date.now(), personId: id, name: person ? person.name : id, sessionId: session, shuttle: activeShuttle(), time: Date.now(), action: 'undo', method: method||'tap' });
     } else {
-      checkins[key] = { time: Date.now(), shuttle: activeShuttle() };
+      const shuttle = activeShuttle();
+      checkins[key] = { time: Date.now(), shuttle };
+      lastScan = { id, name: person ? person.name : id, session, shuttle };
+      appendLog({ logId: genId()+Date.now(), personId: id, name: person ? person.name : id, sessionId: session, shuttle, time: Date.now(), action: 'checkin', method: method||'tap' });
     }
     await saveCheckins();
     renderCheckinList();
+    renderLiveCounter();
   }
+
+  el('undo-last-btn').addEventListener('click', async ()=>{
+    if(!lastScan){ showFlash('No scan yet to undo.', 'warn'); return; }
+    const key = checkinKey(lastScan.session, lastScan.id);
+    if(checkins[key]){
+      delete checkins[key];
+      appendLog({ logId: genId()+Date.now(), personId: lastScan.id, name: lastScan.name, sessionId: lastScan.session, shuttle: lastScan.shuttle, time: Date.now(), action: 'undo', method: 'undo-last' });
+      await saveCheckins();
+      showFlash(lastScan.name + '\u2019s check-in was undone', 'warn');
+      renderCheckinList();
+      renderLiveCounter();
+      lastScan = null;
+    } else {
+      showFlash('That check-in was already removed.', 'warn');
+    }
+  });
 
   function showFlash(msg, type){
     const area = el('flash-area');
@@ -664,20 +735,24 @@ Alex Kim
         async (decodedText)=>{
           const code = decodedText.trim().toUpperCase();
           const r = roster.find(x=>x.id === code);
-          if(!r){ showFlash('Code not recognized: ' + code, 'warn'); return; }
+          if(!r){ showFlash('Code not recognized: ' + code, 'warn'); if(navigator.vibrate) navigator.vibrate([80,60,80]); return; }
           const session = activeSession();
           const key = checkinKey(session, r.id);
-          if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn'); return; }
+          if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn'); if(navigator.vibrate) navigator.vibrate([80,60,80]); return; }
           const shuttle = activeShuttle();
           if(r.assignedShuttle && r.assignedShuttle !== shuttle){
             showFlash(r.name + ' is assigned to Shuttle ' + r.assignedShuttle + ', not this one — checking in anyway', 'warn');
           }
           checkins[key] = { time: Date.now(), shuttle };
+          lastScan = { id: r.id, name: r.name, session, shuttle };
+          appendLog({ logId: genId()+Date.now(), personId: r.id, name: r.name, sessionId: session, shuttle, time: Date.now(), action: 'checkin', method: 'scan' });
           await saveCheckins();
           if(!r.assignedShuttle || r.assignedShuttle === shuttle){
             showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok');
           }
+          if(navigator.vibrate) navigator.vibrate(150);
           renderCheckinList();
+          renderLiveCounter();
         },
         ()=>{}
       );
@@ -737,6 +812,45 @@ Alex Kim
         </div>
       </div>`).join('');
     }
+  }
+
+  // ---- Log ----
+  function populateLogFilter(){
+    const sel = el('log-session-filter');
+    if(sel.options.length <= 1){
+      sel.innerHTML = '<option value="all">All Trips</option>' + SESSIONS.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+    }
+  }
+
+  el('log-session-filter').addEventListener('change', renderLog);
+  el('log-search').addEventListener('input', renderLog);
+
+  function renderLog(){
+    populateLogFilter();
+    if(!dataLoaded){
+      el('log-list').innerHTML = '<p class="muted">Loading log…</p>';
+      return;
+    }
+    const sessionFilter = el('log-session-filter').value;
+    const q = el('log-search').value.trim().toLowerCase();
+    let entries = logs.slice();
+    if(sessionFilter !== 'all') entries = entries.filter(e=>e.sessionId === sessionFilter);
+    if(q) entries = entries.filter(e=>(e.name||'').toLowerCase().includes(q));
+    entries.sort((a,b)=> b.time - a.time);
+    const listEl = el('log-list');
+    if(entries.length === 0){ listEl.innerHTML = '<p class="muted">No scan activity yet for this filter.</p>'; return; }
+    listEl.innerHTML = entries.map(e=>{
+      const actionLabel = e.action === 'undo' ? 'Undo' : 'Checked in';
+      const actionColor = e.action === 'undo' ? 'var(--red)' : 'var(--teal)';
+      const methodLabel = e.method === 'scan' ? 'Camera scan' : (e.method === 'undo-last' ? 'Undo last' : 'Manual tap');
+      return `<div class="attendee-row">
+        <div>
+          <div class="attendee-name">${escapeHtml(e.name || e.personId)}</div>
+          <div class="attendee-meta">${sessionLabel(e.sessionId)} · Shuttle ${e.shuttle} · ${methodLabel} · ${new Date(e.time).toLocaleString()}</div>
+        </div>
+        <span style="font-family:var(--mono); font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:${actionColor};">${actionLabel}</span>
+      </div>`;
+    }).join('');
   }
 
   // ---- Live sync from Firestore (fires immediately on load, then on every change from any device) ----

@@ -714,7 +714,33 @@ Alex Kim
     setTimeout(()=>{ area.innerHTML=''; }, 3000);
   }
 
+  // ---- Audio feedback (works on iOS Safari, unlike vibration) ----
+  let audioCtx = null;
+  function unlockAudio(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ audioCtx = null; }
+    } else if(audioCtx.state === 'suspended'){
+      audioCtx.resume();
+    }
+  }
+  function beep(freq, durationMs){
+    if(!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + durationMs/1000);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + durationMs/1000);
+  }
+  function playSuccessTone(){ beep(880, 140); }
+  function playWarnTone(){ beep(300, 120); setTimeout(()=>beep(300, 120), 160); }
+
   el('toggle-scan-btn').addEventListener('click', async ()=>{
+    unlockAudio();
     if(!dataLoaded){
       showFlash('Still loading roster — try again in a second.', 'warn');
       return;
@@ -735,10 +761,10 @@ Alex Kim
         async (decodedText)=>{
           const code = decodedText.trim().toUpperCase();
           const r = roster.find(x=>x.id === code);
-          if(!r){ showFlash('Code not recognized: ' + code, 'warn'); if(navigator.vibrate) navigator.vibrate([80,60,80]); return; }
+          if(!r){ showFlash('Code not recognized: ' + code, 'warn'); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); return; }
           const session = activeSession();
           const key = checkinKey(session, r.id);
-          if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn'); if(navigator.vibrate) navigator.vibrate([80,60,80]); return; }
+          if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn'); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); return; }
           const shuttle = activeShuttle();
           if(r.assignedShuttle && r.assignedShuttle !== shuttle){
             showFlash(r.name + ' is assigned to Shuttle ' + r.assignedShuttle + ', not this one — checking in anyway', 'warn');
@@ -751,6 +777,7 @@ Alex Kim
             showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok');
           }
           if(navigator.vibrate) navigator.vibrate(150);
+          playSuccessTone();
           renderCheckinList();
           renderLiveCounter();
         },

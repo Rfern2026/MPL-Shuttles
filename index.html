@@ -310,6 +310,7 @@ Alex Kim
         </div>
         <div class="scan-box hidden" id="scan-box">
           <div id="reader"></div>
+          <button class="btn" id="scan-next-btn" style="display:none; width:100%; margin-top:10px;">Scan Next Passenger</button>
           <p class="muted" style="text-align:center;">Point a boarding pass QR at the camera. If the camera doesn't work in this preview, use the tap-to-check-in list below instead.</p>
         </div>
         <div id="live-counter" class="flip-card" style="margin-bottom:14px; text-align:left; padding:12px 16px;"></div>
@@ -708,10 +709,12 @@ Alex Kim
     }
   });
 
-  function showFlash(msg, type){
+  function showFlash(msg, type, persistent){
     const area = el('flash-area');
     area.innerHTML = `<div class="flash ${type}">${msg}</div>`;
-    setTimeout(()=>{ area.innerHTML=''; }, 3000);
+    if(!persistent){
+      setTimeout(()=>{ area.innerHTML=''; }, 3000);
+    }
   }
 
   // ---- Audio feedback (works on iOS Safari, unlike vibration) ----
@@ -759,44 +762,63 @@ Alex Kim
     if(scanning){
       try{ await html5QrCode.stop(); }catch(e){}
       el('scan-box').classList.add('hidden');
+      el('scan-next-btn').style.display = 'none';
       el('toggle-scan-btn').textContent = 'Start Camera Scan';
       scanning = false;
       return;
     }
     el('scan-box').classList.remove('hidden');
-    const recentScans = {}; // code -> timestamp of last processed scan
-    const SCAN_COOLDOWN_MS = 3000; // ignore repeat detections of the same code within this window
+    el('scan-next-btn').style.display = 'none';
+    let awaitingNext = false; // true while paused, waiting for the driver to tap "Scan Next"
+    const recentScans = {}; // code -> timestamp of last processed scan (backup guard)
+    const SCAN_COOLDOWN_MS = 3000;
+
+    function pauseAfterScan(){
+      awaitingNext = true;
+      try{ html5QrCode.pause(true); }catch(e){}
+      el('scan-next-btn').style.display = 'block';
+    }
+
+    el('scan-next-btn').onclick = ()=>{
+      awaitingNext = false;
+      el('scan-next-btn').style.display = 'none';
+      el('flash-area').innerHTML = '';
+      try{ html5QrCode.resume(); }catch(e){}
+    };
+
     try{
       html5QrCode = new Html5Qrcode('reader');
       await html5QrCode.start(
         { facingMode: 'environment' },
         { fps: 10, qrbox: 220 },
         async (decodedText)=>{
+          if(awaitingNext) return; // still reviewing the previous scan — ignore anything the camera sees
           const code = decodedText.trim().toUpperCase();
           const now = Date.now();
-          if(recentScans[code] && (now - recentScans[code]) < SCAN_COOLDOWN_MS) return; // same code still in view, ignore
+          if(recentScans[code] && (now - recentScans[code]) < SCAN_COOLDOWN_MS) return;
           recentScans[code] = now;
 
           const r = roster.find(x=>x.id === code);
-          if(!r){ showFlash('Code not recognized: ' + code, 'warn'); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); return; }
+          if(!r){ showFlash('Code not recognized: ' + code, 'warn', true); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); pauseAfterScan(); return; }
           const session = activeSession();
           const key = checkinKey(session, r.id);
-          if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn'); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); return; }
+          if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn', true); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); pauseAfterScan(); return; }
           const shuttle = activeShuttle();
           if(r.assignedShuttle && r.assignedShuttle !== shuttle){
-            showFlash(r.name + ' is assigned to Shuttle ' + r.assignedShuttle + ', not this one — checking in anyway', 'warn');
+            showFlash(r.name + ' is assigned to Shuttle ' + r.assignedShuttle + ', not this one — checking in anyway', 'warn', true);
           }
           checkins[key] = { time: Date.now(), shuttle };
           lastScan = { id: r.id, name: r.name, session, shuttle };
           appendLog({ logId: genId()+Date.now(), personId: r.id, name: r.name, sessionId: session, shuttle, time: Date.now(), action: 'checkin', method: 'scan' });
           await saveCheckins();
           if(!r.assignedShuttle || r.assignedShuttle === shuttle){
-            showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok');
+            showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok', true);
           }
           if(navigator.vibrate) navigator.vibrate(150);
           playSuccessTone();
           renderCheckinList();
           renderLiveCounter();
+          pauseAfterScan();
         },
         ()=>{}
       );

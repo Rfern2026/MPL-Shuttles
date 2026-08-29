@@ -719,7 +719,21 @@ Alex Kim
     }
   }
 
-  el('checkin-driver-active').addEventListener('change', ()=>{
+  async function autoCheckInDriverAsPassenger(driverName, session, shuttle){
+    const match = roster.find(r => r.name.trim().toLowerCase() === driverName.trim().toLowerCase());
+    if(!match) return; // driver isn't on the passenger list — nothing to auto check-in
+    const key = checkinKey(session, match.id);
+    if(checkins[key]) return; // already checked in for this trip, nothing to do
+    checkins[key] = { time: Date.now(), shuttle };
+    lastScan = { id: match.id, name: match.name, session, shuttle };
+    appendLog({ logId: genId()+Date.now(), personId: match.id, name: match.name, sessionId: session, shuttle, time: Date.now(), action: 'checkin', method: 'driver-auto' });
+    await saveCheckins();
+    renderCheckinList();
+    renderLiveCounter();
+    showFlash(`${match.name} (driver) auto checked in — Shuttle ${shuttle}`, 'ok');
+  }
+
+  el('checkin-driver-active').addEventListener('change', async ()=>{
     const driverId = el('checkin-driver-active').value;
     if(!driverId) return;
     const d = drivers.find(x=>x.id===driverId);
@@ -730,6 +744,8 @@ Alex Kim
     if(optionExists){
       shuttleSel.value = d.shuttle;
       renderLiveCounter();
+      const session = activeSession();
+      if(session) await autoCheckInDriverAsPassenger(d.name, session, d.shuttle);
     } else {
       showFlash(`${d.name}'s assigned Shuttle ${d.shuttle} is closed for this trip — pick a shuttle manually.`, 'warn');
     }
@@ -821,7 +837,7 @@ Alex Kim
 
   el('checkin-search').addEventListener('input', renderCheckinList);
   el('show-boarded-toggle').addEventListener('change', renderCheckinList);
-  el('checkin-session-active').addEventListener('change', ()=>{
+  el('checkin-session-active').addEventListener('change', async ()=>{
     populateShuttleActive();
     populateDriverSelect();
     const driverId = el('checkin-driver-active').value;
@@ -830,6 +846,8 @@ Alex Kim
       const shuttleSel = el('checkin-shuttle-active');
       if(d && Array.from(shuttleSel.options).some(o=>o.value===d.shuttle)){
         shuttleSel.value = d.shuttle;
+        const session = activeSession();
+        if(session) await autoCheckInDriverAsPassenger(d.name, session, d.shuttle);
       }
     }
     renderCheckinList();

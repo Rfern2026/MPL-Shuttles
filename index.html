@@ -724,20 +724,31 @@ Alex Kim
       audioCtx.resume();
     }
   }
-  function beep(freq, durationMs){
+  function beep(freq, startOffset, durationMs, type, gainVal){
     if(!audioCtx) return;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    osc.type = 'sine';
+    osc.type = type || 'sine';
     osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + durationMs/1000);
+    const startTime = audioCtx.currentTime + startOffset;
+    gain.gain.setValueAtTime(gainVal || 0.2, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + durationMs/1000);
     osc.connect(gain).connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + durationMs/1000);
+    osc.start(startTime);
+    osc.stop(startTime + durationMs/1000);
   }
-  function playSuccessTone(){ beep(880, 140); }
-  function playWarnTone(){ beep(300, 120); setTimeout(()=>beep(300, 120), 160); }
+  // "Twinkle" — chosen success tone
+  function playSuccessTone(){
+    beep(1800, 0, 80, 'sine');
+    beep(2400, 0.08, 120, 'sine');
+  }
+  // "High Warble" — chosen warn/duplicate tone
+  function playWarnTone(){
+    beep(1800, 0, 60, 'sine', 0.15);
+    beep(2200, 0.06, 60, 'sine', 0.15);
+    beep(1800, 0.12, 60, 'sine', 0.15);
+    beep(2200, 0.18, 60, 'sine', 0.15);
+  }
 
   el('toggle-scan-btn').addEventListener('click', async ()=>{
     unlockAudio();

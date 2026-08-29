@@ -764,6 +764,8 @@ Alex Kim
       return;
     }
     el('scan-box').classList.remove('hidden');
+    const recentScans = {}; // code -> timestamp of last processed scan
+    const SCAN_COOLDOWN_MS = 3000; // ignore repeat detections of the same code within this window
     try{
       html5QrCode = new Html5Qrcode('reader');
       await html5QrCode.start(
@@ -771,6 +773,10 @@ Alex Kim
         { fps: 10, qrbox: 220 },
         async (decodedText)=>{
           const code = decodedText.trim().toUpperCase();
+          const now = Date.now();
+          if(recentScans[code] && (now - recentScans[code]) < SCAN_COOLDOWN_MS) return; // same code still in view, ignore
+          recentScans[code] = now;
+
           const r = roster.find(x=>x.id === code);
           if(!r){ showFlash('Code not recognized: ' + code, 'warn'); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); return; }
           const session = activeSession();

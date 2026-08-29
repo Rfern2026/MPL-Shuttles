@@ -593,6 +593,7 @@ Alex Kim
           <div class="attendee-meta">${r.id} · ${n > 0 ? n + ' of ' + SESSIONS.length + ' trips boarded' : 'not boarded yet'}</div>
         </div>
         <select data-id="${r.id}" class="assign-select" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
+        <button class="btn danger passenger-remove-btn" data-id="${r.id}" style="margin-left:8px;">Remove</button>
       </div>`;
     });
     html += '</div>';
@@ -603,6 +604,21 @@ Alex Kim
       sel.addEventListener('change', async ()=>{
         const rr = roster.find(x=>x.id === sel.dataset.id);
         if(rr){ rr.assignedShuttle = sel.value || null; await saveRoster(); }
+      });
+    });
+    document.querySelectorAll('.passenger-remove-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const r = roster.find(x=>x.id === btn.dataset.id);
+        if(!r) return;
+        if(!confirm(`Remove ${r.name} from the passenger list? Their boarding pass will stop working, but their past check-in history stays in the log.`)) return;
+        roster = roster.filter(x=>x.id !== btn.dataset.id);
+        await saveRoster();
+        renderRosterPreview();
+        renderPasses();
+        renderCheckinList();
+        renderLiveCounter();
+        renderDashboard();
+        el('setup-status').textContent = `${r.name} removed from the passenger list.`;
       });
     });
   }

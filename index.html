@@ -258,9 +258,9 @@
       </div>
     </div>
     <div class="tabs">
-      <button class="tab active" data-tab="setup">Setup</button>
+      <button class="tab" data-tab="setup">Setup</button>
       <button class="tab" data-tab="passes">QR Codes</button>
-      <button class="tab" data-tab="checkin">Check-In</button>
+      <button class="tab active" data-tab="checkin">Check-In</button>
       <button class="tab" data-tab="dashboard">Dashboard</button>
       <button class="tab" data-tab="log">Log</button>
     </div>
@@ -269,7 +269,7 @@
   <div class="panel">
 
     <!-- SETUP TAB -->
-    <div id="tab-setup" class="tab-content">
+    <div id="tab-setup" class="tab-content hidden">
       <div class="card">
         <h2>1 · Build Passenger List</h2>
         <p class="muted" style="margin-top:-6px;">Paste one attendee name per line. Boarding is first come, first served — nobody is pre-assigned to a shuttle; drivers just log which shuttle each person actually gets on.</p>
@@ -326,7 +326,7 @@ Alex Kim
     </div>
 
     <!-- CHECKIN TAB -->
-    <div id="tab-checkin" class="tab-content hidden">
+    <div id="tab-checkin" class="tab-content">
       <div class="card">
         <h2>This Driver is boarding</h2>
         <p class="muted" style="margin-top:-6px;">Pick your name to auto-fill your assigned shuttle, then set the trip. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all trips.</p>
@@ -1266,6 +1266,7 @@ Alex Kim
   } else {
     renderRosterPreview();
     renderDriversPreview();
+    renderCheckin();
     renderDashboard();
   }
 })();

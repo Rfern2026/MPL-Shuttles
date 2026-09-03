@@ -1243,6 +1243,7 @@ Alex Kim
     list = list.slice().sort((a,b)=> a.name.localeCompare(b.name));
     const container = el('checkin-list');
     if(list.length === 0){ container.innerHTML = '<p class="muted">Everyone matching this search has boarded this trip.</p>'; return; }
+    const shuttleFullNow = seatsOpenOn(session, activeShuttle()) === 0;
     container.innerHTML = list.map(r=>{
       const key = checkinKey(session, r.id);
       const done = !!checkins[key];
@@ -1259,8 +1260,10 @@ Alex Kim
       }
       if(reservedShuttle === 'none' && !done) meta += ' · <span style="color:var(--ink-soft);">No shuttle reserved</span>';
       if(noReservationAtAll) meta += ' · <span style="color:var(--amber);">⚠ No reservation on file</span>';
-      const btnClass = done ? 'done' : (resMismatch ? 'danger' : (noReservationAtAll ? 'warn-btn' : 'pending'));
-      const btnLabel = done ? 'Undo' : (resMismatch ? 'Wrong Shuttle' : (noReservationAtAll ? 'No Reservation' : 'Check In'));
+      const fullBlock = !done && !resMismatch && !noReservationAtAll && shuttleFullNow;
+      if(fullBlock) meta += ' · <span style="color:var(--red);">⚠ Shuttle full</span>';
+      const btnClass = done ? 'done' : (resMismatch ? 'danger' : (noReservationAtAll ? 'warn-btn' : (fullBlock ? 'danger' : 'pending')));
+      const btnLabel = done ? 'Undo' : (resMismatch ? 'Wrong Shuttle' : (noReservationAtAll ? 'No Reservation' : (fullBlock ? 'Shuttle Full' : 'Check In')));
       return `<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>
@@ -1309,6 +1312,11 @@ Alex Kim
         const seatsOpen = seatsOpenOn(session, shuttle);
         const seatsNote = seatsOpen === null ? '' : (seatsOpen === 0 ? `\n\nThis shuttle shows FULL — no seats currently open.` : `\n\n${seatsOpen} seat(s) currently open on this shuttle.`);
         const ok = confirm(`${name} has no reservation for this trip.${seatsNote}\n\nCheck them in on Shuttle ${shuttle} anyway?`);
+        if(!ok) return;
+      }
+      const seatsOpenNow = seatsOpenOn(session, shuttle);
+      if(seatsOpenNow !== null && seatsOpenNow <= 0){
+        const ok = confirm(`Shuttle ${shuttle} shows FULL for this trip (0 seats open).\n\nCheck in ${name} anyway? This will exceed the configured capacity.`);
         if(!ok) return;
       }
       checkins[key] = { time: Date.now(), shuttle };
@@ -1381,6 +1389,7 @@ Alex Kim
   }
   function beep(freq, startOffset, durationMs, type, gainVal){
     if(!audioCtx) return;
+    if(audioCtx.state !== 'running'){ audioCtx.resume(); } // phones often auto-suspend audio after screen-off/backgrounding — resume every time, not just once
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = type || 'sine';
@@ -1473,6 +1482,15 @@ Alex Kim
             const seatsOpen = seatsOpenOn(session, shuttle);
             const seatsNote = seatsOpen === null ? '' : (seatsOpen === 0 ? ' This shuttle shows FULL.' : ' ' + seatsOpen + ' seat(s) open.');
             showFlash(r.name + ' has no reservation for this trip — NOT checked in.' + seatsNote + ' Use the tap list below to check them in if you have room.', 'warn', true);
+            playWarnTone();
+            if(navigator.vibrate) navigator.vibrate([80,60,80]);
+            renderCheckinList();
+            pauseAfterScan();
+            return;
+          }
+          const seatsOpenNow = seatsOpenOn(session, shuttle);
+          if(seatsOpenNow !== null && seatsOpenNow <= 0){
+            showFlash('Shuttle ' + shuttle + ' shows FULL for this trip — ' + r.name + ' NOT checked in. Use the tap list below to override if you have room.', 'warn', true);
             playWarnTone();
             if(navigator.vibrate) navigator.vibrate([80,60,80]);
             renderCheckinList();

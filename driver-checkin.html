@@ -202,6 +202,7 @@
     border-radius: 6px; padding: 7px 12px; cursor: pointer; border: none;
   }
   .check-btn.pending{ background: var(--navy-panel-2); color: var(--paper); }
+  .check-btn.danger{ background: var(--red); color: var(--navy); }
   .check-btn.done{ background: var(--teal); color: var(--navy); }
 
   /* Dashboard */
@@ -1006,14 +1007,19 @@
       let meta = done ? 'Boarded Shuttle ' + checkins[key].shuttle + ' · ' + new Date(checkins[key].time).toLocaleTimeString() : 'Not boarded this trip';
       if(mismatch) meta += ' · <span style="color:var(--red);">Assigned to Shuttle ' + r.assignedShuttle + '</span>';
       const reservedShuttle = reservations[checkinKey(session, r.id)];
-      if(reservedShuttle && reservedShuttle !== 'none' && !done) meta += ' · <span style="color:var(--teal);">Reserved Shuttle ' + reservedShuttle + '</span>';
+      const resMismatch = !done && reservedShuttle && reservedShuttle !== 'none' && reservedShuttle !== activeShuttle();
+      if(reservedShuttle && reservedShuttle !== 'none' && !done){
+        meta += resMismatch
+          ? ' · <span style="color:var(--red);">⚠ Reserved Shuttle ' + reservedShuttle + ' — not this one</span>'
+          : ' · <span style="color:var(--teal);">Reserved Shuttle ' + reservedShuttle + '</span>';
+      }
       if(reservedShuttle === 'none' && !done) meta += ' · <span style="color:var(--ink-soft);">No shuttle reserved</span>';
       return `<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>
           <div class="attendee-meta">${meta}</div>
         </div>
-        <button class="check-btn ${done?'done':'pending'}" data-id="${r.id}">${done ? 'Undo' : 'Check In'}</button>
+        <button class="check-btn ${done?'done':(resMismatch?'danger':'pending')}" data-id="${r.id}">${done ? 'Undo' : (resMismatch ? 'Wrong Shuttle' : 'Check In')}</button>
       </div>`;
     }).join('');
     container.querySelectorAll('.check-btn').forEach(btn=>{
@@ -1022,6 +1028,13 @@
   }
 
   let lastScan = null; // { id, name, session, shuttle }
+
+  function reservationMismatch(session, personId, shuttle){
+    const res = reservations[checkinKey(session, personId)];
+    if(!res || res === 'none') return null;
+    if(res === shuttle) return null;
+    return res;
+  }
 
   async function toggleCheckin(id, method){
     const session = activeSession();
@@ -1032,6 +1045,11 @@
       appendLog({ logId: genId()+Date.now(), personId: id, name: person ? person.name : id, sessionId: session, shuttle: activeShuttle(), time: Date.now(), action: 'undo', method: method||'tap' });
     } else {
       const shuttle = activeShuttle();
+      const mismatch = reservationMismatch(session, id, shuttle);
+      if(mismatch){
+        const ok = confirm(`${person ? person.name : 'This passenger'} reserved Shuttle ${mismatch} for this trip — you're checking them in on Shuttle ${shuttle}.\n\nOverride and check in here anyway?`);
+        if(!ok) return;
+      }
       checkins[key] = { time: Date.now(), shuttle };
       lastScan = { id, name: person ? person.name : id, session, shuttle };
       appendLog({ logId: genId()+Date.now(), personId: id, name: person ? person.name : id, sessionId: session, shuttle, time: Date.now(), action: 'checkin', method: method||'tap' });
@@ -1181,6 +1199,15 @@
           const key = checkinKey(session, r.id);
           if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn', true); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); pauseAfterScan(); return; }
           const shuttle = activeShuttle();
+          const resMismatch = reservationMismatch(session, r.id, shuttle);
+          if(resMismatch){
+            showFlash(r.name + ' reserved Shuttle ' + resMismatch + ' for this trip — NOT checked in on Shuttle ' + shuttle + '. Use the tap list below to override if this is intentional.', 'warn', true);
+            playWarnTone();
+            if(navigator.vibrate) navigator.vibrate([80,60,80]);
+            renderCheckinList();
+            pauseAfterScan();
+            return;
+          }
           if(r.assignedShuttle && r.assignedShuttle !== shuttle){
             showFlash(r.name + ' is assigned to Shuttle ' + r.assignedShuttle + ', not this one — checking in anyway', 'warn', true);
           }

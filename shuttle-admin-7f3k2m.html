@@ -249,6 +249,7 @@
   }
   @media screen{
     #reservations-print-area{ display: none; }
+    #dashboard-print-area{ display: none; }
   }
 </style>
 </head>
@@ -381,6 +382,7 @@ Alex Kim
         <div class="row">
           <select id="dashboard-session-select" style="margin-bottom:0; width:auto;"></select>
           <button class="btn secondary" id="toggle-close-trip-btn"></button>
+          <button class="btn secondary" id="print-boarded-manifest-btn">Print Boarded Manifest</button>
         </div>
         <p class="muted" id="trip-status-note" style="margin-top:8px;"></p>
       </div>
@@ -389,6 +391,7 @@ Alex Kim
         <h2>Not yet boarded on this trip</h2>
         <div id="missing-list" class="missing-list"></div>
       </div>
+      <div id="dashboard-print-area" class="print-target"></div>
     </div>
 
     <!-- LOG TAB -->
@@ -1524,6 +1527,33 @@ Alex Kim
     el('trip-status-note').textContent = allClosed
       ? 'Every shuttle is closed for this trip — it no longer appears in the driver\u2019s trip picker.'
       : (anyOpen ? 'Tap a shuttle below to close or reopen it individually for this trip.' : '');
+
+    el('print-boarded-manifest-btn').onclick = ()=>{
+      let printHtml = `<h2 style="margin-bottom:4px;">${escapeHtml(sessionLabel(session))} — Boarded Manifest</h2>
+        <p style="font-family:var(--mono); font-size:12px; color:#555; margin-top:0; margin-bottom:20px;">Printed ${new Date().toLocaleString()}</p>`;
+      letters.forEach(l=>{
+        const cfg = shuttleSchedule[closedKey(session, l)];
+        const boarded = roster.filter(r=>{
+          const c = checkins[checkinKey(session, r.id)];
+          return c && c.shuttle === l;
+        }).map(r=>({ name: r.name, time: checkins[checkinKey(session, r.id)].time }))
+          .sort((a,b)=>a.name.localeCompare(b.name));
+        const shuttleDrivers = drivers.filter(d => d.shuttle === l).map(d=>d.name);
+        const driverLine = shuttleDrivers.length > 0
+          ? `<p style="margin:2px 0 8px 0; font-weight:600;">Driver: ${escapeHtml(shuttleDrivers.join(', '))}</p>`
+          : `<p style="margin:2px 0 8px 0; color:#a00;">Driver: not yet assigned</p>`;
+        const capNote = cfg ? ` (${boarded.length} / ${cfg.capacity} passenger seats · ${cfg.capacity + 1} total incl. driver)` : ` (${boarded.length} boarded)`;
+        printHtml += `<h3 style="margin:18px 0 2px 0; border-bottom:2px solid #000; padding-bottom:4px;">Shuttle ${l}${capNote}</h3>`;
+        printHtml += driverLine;
+        if(boarded.length === 0){
+          printHtml += '<p style="color:#777;">Nobody boarded this shuttle for this trip.</p>';
+        } else {
+          printHtml += '<ol style="margin:0; padding-left:20px;">' + boarded.map(b=>`<li style="padding:3px 0;">${escapeHtml(b.name)} <span style="color:#777; font-family:monospace; font-size:11px;">· ${new Date(b.time).toLocaleTimeString()}</span></li>`).join('') + '</ol>';
+        }
+      });
+      el('dashboard-print-area').innerHTML = printHtml;
+      window.print();
+    };
 
     const grid = el('flip-grid');
     let html = '';

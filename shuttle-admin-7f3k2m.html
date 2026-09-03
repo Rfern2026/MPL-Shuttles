@@ -263,15 +263,79 @@
       </div>
     </div>
     <div class="tabs">
+      <button class="tab" data-tab="setup">Setup</button>
+      <button class="tab" data-tab="passes">QR Codes</button>
       <button class="tab active" data-tab="checkin">Check-In</button>
       <button class="tab" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="log">Log</button>
+      <button class="tab" data-tab="reservations">Reservations</button>
     </div>
   </div>
 
   <div class="panel">
 
-    <!-- Hidden: shuttle count is configured in the full admin app; kept here so shared logic keeps working. -->
-    <input type="number" id="shuttle-count" value="3" class="hidden">
+    <!-- SETUP TAB -->
+    <div id="tab-setup" class="tab-content hidden">
+      <div class="card">
+        <h2>1 · Build Passenger List</h2>
+        <p class="muted" style="margin-top:-6px;">Paste one attendee per line. Add the last 4 digits of their phone after a comma to enable reservation verification (optional — you can also fill it in per-row below later). Boarding is first come, first served — nobody is pre-assigned to a shuttle; drivers just log which shuttle each person actually gets on.</p>
+        <label for="names-input">Attendee names</label>
+        <textarea id="names-input" placeholder="Jane Doe, 4821
+Sam Patel, 7790
+Alex Kim
+..."></textarea>
+        <div class="row">
+          <div>
+            <label for="shuttle-count">Number of shuttles</label>
+            <input type="number" id="shuttle-count" min="1" max="10" value="3">
+          </div>
+          <button class="btn" id="build-roster-btn">Build List</button>
+          <button class="btn secondary" id="add-more-btn">Add Names to Existing List</button>
+        </div>
+        <p class="muted" id="setup-status"></p>
+      </div>
+
+      <div class="card" id="roster-preview-card" style="display:none;">
+        <h2>2 · Passenger List</h2>
+        <p class="muted" style="margin-top:-6px;">Everyone below gets one QR boarding pass. Which shuttle someone boards is handled entirely through the Reservations tab now — passengers pick it themselves on the reservation page. The phone field is optional contact info, not currently used for verification.</p>
+        <div id="roster-table"></div>
+      </div>
+
+      <div class="card">
+        <h2>3 · Drivers</h2>
+        <p class="muted" style="margin-top:-6px;">Add each driver and the shuttle they're assigned to. On the Check-In tab, drivers pick their own name and the shuttle fills in automatically. Reassign anyone here anytime — changes apply immediately everywhere.</p>
+        <div class="row">
+          <input type="text" id="driver-name-input" placeholder="Driver name" style="margin-bottom:0; flex:1; min-width:160px;">
+          <select id="driver-shuttle-input" style="margin-bottom:0; width:auto;"></select>
+          <button class="btn" id="add-driver-btn">Add Driver</button>
+        </div>
+        <div id="drivers-table" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>4 · Shuttle Schedule &amp; Capacity</h2>
+        <p class="muted" style="margin-top:-6px;">Set a departure time and seat capacity for each shuttle on each trip. Only trips you fill in here will show up on the passenger reservation page — leave a row blank to skip reservations for that trip/shuttle.</p>
+        <div id="shuttle-schedule-table"></div>
+      </div>
+
+      <div class="card">
+        <h2>Reset</h2>
+        <p class="muted" style="margin-top:-6px;">Clears the passenger list, drivers, shuttle schedule, reservations, and all check-ins for everyone on this event. Use between events, not during one.</p>
+        <button class="btn danger" id="reset-btn">Reset Event Data</button>
+      </div>
+    </div>
+
+    <!-- PASSES TAB -->
+    <div id="tab-passes" class="tab-content hidden">
+      <div class="card">
+        <h2>Boarding passes</h2>
+        <p class="muted" style="margin-top:-6px;">One pass per attendee — the same code is valid for all trips. Drivers pick the correct trip from a dropdown before scanning, so this one code checks in independently each time. The code below the QR also works for manual entry.</p>
+        <button class="btn secondary" id="print-btn">Print All</button>
+      </div>
+      <div id="print-area" class="print-target">
+        <div class="pass-grid" id="pass-grid"></div>
+      </div>
+    </div>
 
     <!-- CHECKIN TAB -->
     <div id="tab-checkin" class="tab-content">
@@ -324,6 +388,41 @@
         <h2>Not yet boarded on this trip</h2>
         <div id="missing-list" class="missing-list"></div>
       </div>
+    </div>
+
+    <!-- LOG TAB -->
+    <div id="tab-log" class="tab-content hidden">
+      <div class="card">
+        <h2>Scan log</h2>
+        <p class="muted" style="margin-top:-6px;">Every check-in and undo, timestamped, newest first — a full audit trail per trip.</p>
+        <div class="row">
+          <select id="log-session-filter" style="margin-bottom:0; width:auto;"><option value="all">All Trips</option></select>
+          <input type="text" id="log-search" placeholder="Search by name..." style="margin-bottom:0; width:auto; flex:1; min-width:160px;">
+        </div>
+        <div id="log-list"></div>
+      </div>
+    </div>
+
+    <!-- RESERVATIONS TAB -->
+    <div id="tab-reservations" class="tab-content hidden">
+      <div class="card">
+        <h2>Passenger reservations</h2>
+        <p class="muted" style="margin-top:-6px;">Send passengers the reservation link (reserve.html) so they can pick a departure time themselves. This tab shows who reserved what — it's read-only except for clearing a reservation if someone needs to be freed up.</p>
+        <div class="row">
+          <select id="reservations-session-select" style="margin-bottom:0; width:auto;"></select>
+          <button class="btn secondary" id="print-manifest-btn">Print This Trip's Manifest</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Reset a passenger</h2>
+        <p class="muted" style="margin-top:-6px;">Fully unlocks someone to start their reservation over from scratch — clears every trip they picked (or skipped) across all trips, not just this one. Use this if a test reservation needs redoing, or someone needs a completely fresh start.</p>
+        <div class="row">
+          <select id="reset-passenger-select" style="margin-bottom:0; flex:1; min-width:160px;"></select>
+          <button class="btn danger" id="reset-passenger-btn">Reset This Passenger</button>
+        </div>
+      </div>
+      <div id="reservations-body"></div>
+      <div id="reservations-print-area" class="print-target"></div>
     </div>
 
   </div>
@@ -489,8 +588,14 @@
     reservationSubmitted = (data && data.reservationSubmitted) || {};
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
+    renderRosterPreview();
+    renderDriversPreview();
+    renderShuttleScheduleTable();
+    if(activeTab === 'passes') renderPasses();
     if(activeTab === 'checkin'){ populateSessionSelects(); populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }
     if(activeTab === 'dashboard') renderDashboard();
+    if(activeTab === 'log') renderLog();
+    if(activeTab === 'reservations') renderReservationsTab();
   }
 
   // ---- Tabs ----
@@ -500,8 +605,11 @@
       document.querySelectorAll('.tab-content').forEach(c=>c.classList.add('hidden'));
       btn.classList.add('active');
       el('tab-'+btn.dataset.tab).classList.remove('hidden');
+      if(btn.dataset.tab === 'passes') renderPasses();
       if(btn.dataset.tab === 'checkin'){ renderCheckin(); renderLiveCounter(); }
       if(btn.dataset.tab === 'dashboard') renderDashboard();
+      if(btn.dataset.tab === 'log') renderLog();
+      if(btn.dataset.tab === 'reservations') renderReservationsTab();
     });
   });
 
@@ -513,6 +621,42 @@
     const phone = phoneRaw.slice(-4);
     return { name, phone };
   }
+
+  el('build-roster-btn').addEventListener('click', async ()=>{
+    const lines = el('names-input').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(lines.length === 0){ el('setup-status').textContent = 'Add at least one name first.'; return; }
+    const shuttleN = getShuttleCount();
+    const existingIds = new Set(roster.map(r=>r.id));
+    roster = lines.map((line)=>{
+      const { name, phone } = parseNameLine(line);
+      let id = genId();
+      while(existingIds.has(id)){ id = genId(); }
+      existingIds.add(id);
+      return { id, name, phone };
+    });
+    checkins = {};
+    await saveRoster();
+    await saveCheckins();
+    el('setup-status').textContent = `Roster built: ${roster.length} attendees. Tracking ${shuttleN} shuttle(s) — first come, first served.`;
+    renderRosterPreview();
+  });
+
+  el('add-more-btn').addEventListener('click', async ()=>{
+    const lines = el('names-input').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(lines.length === 0){ el('setup-status').textContent = 'Add at least one name first.'; return; }
+    const existingIds = new Set(roster.map(r=>r.id));
+    lines.forEach(line=>{
+      const { name, phone } = parseNameLine(line);
+      let id = genId();
+      while(existingIds.has(id)){ id = genId(); }
+      existingIds.add(id);
+      roster.push({ id, name, phone });
+    });
+    await saveRoster();
+    el('setup-status').textContent = `Added ${lines.length}. Roster now has ${roster.length} attendees.`;
+    el('names-input').value = '';
+    renderRosterPreview();
+  });
 
   function renderRosterPreview(){
     if(roster.length === 0){ el('roster-preview-card').style.display = 'none'; return; }
@@ -555,6 +699,29 @@
     });
   }
 
+  el('reset-btn').addEventListener('click', async ()=>{
+    if(!confirm('This clears the passenger list, drivers, shuttle schedule, reservations, all check-ins, trip open/closed status, and the scan log for everyone viewing this event. Continue?')) return;
+    roster = [];
+    checkins = {};
+    logs = [];
+    closedSessions = {};
+    drivers = [];
+    shuttleSchedule = {};
+    reservations = {};
+    reservationSubmitted = {};
+    lastScan = null;
+    await saveRoster();
+    await saveCheckins();
+    await saveClosedSessions();
+    await saveDrivers();
+    if(isConfigured){
+      try{ await eventDocRef.set({ logs: [], shuttleSchedule: {}, reservations: {}, reservationSubmitted: {} }, { merge: true }); }catch(e){ console.error('Failed to clear log/schedule/reservations', e); }
+    }
+    el('roster-preview-card').style.display = 'none';
+    el('setup-status').textContent = 'Event data reset.';
+    renderPasses(); renderCheckin(); renderDashboard(); renderLog(); renderShuttleScheduleTable(); renderReservationsTab();
+  });
+
   function escapeHtml(s){
     return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
@@ -568,7 +735,18 @@
     if(letters.includes(current)) sel.value = current;
   }
 
-
+  el('add-driver-btn').addEventListener('click', async ()=>{
+    populateDriverShuttleInput();
+    const name = el('driver-name-input').value.trim();
+    if(!name){ el('setup-status').textContent = 'Enter a driver name first.'; return; }
+    const shuttle = el('driver-shuttle-input').value;
+    drivers.push({ id: genId(), name, shuttle });
+    await saveDrivers();
+    el('driver-name-input').value = '';
+    renderDriversPreview();
+    populateDriverSelect();
+    el('setup-status').textContent = `Added driver ${name} on Shuttle ${shuttle}.`;
+  });
 
   function renderDriversPreview(){
     populateDriverShuttleInput();
@@ -869,6 +1047,7 @@
     });
   }
 
+  el('print-btn').addEventListener('click', ()=> window.print());
 
   // ---- Check-in ----
   function populateShuttleActive(){
@@ -1343,7 +1522,8 @@
     }
   }
 
-
+  el('log-session-filter').addEventListener('change', renderLog);
+  el('log-search').addEventListener('input', renderLog);
 
   function renderLog(){
     populateLogFilter();
@@ -1380,8 +1560,12 @@
       err => { console.error('Firestore sync error', err); document.getElementById('config-banner').classList.remove('hidden'); }
     );
   } else {
+    renderRosterPreview();
+    renderDriversPreview();
+    renderShuttleScheduleTable();
     renderCheckin();
     renderDashboard();
+    renderReservationsTab();
   }
 })();
 </script>

@@ -525,16 +525,32 @@ Alex Kim
     catch(e){ console.error('Failed to save roster', e); }
   }
 
-  async function saveCheckins(){
+  // Nested-map fields (checkins, closedSessions, shuttleSchedule, etc.) need a full
+  // replace, not a merge — set(..., {merge:true}) deep-merges nested objects, so a key
+  // removed locally (an undo, a reopened shuttle, a cleared schedule row) never actually
+  // gets deleted from Firestore; it just silently comes back on the next sync. update()
+  // replaces the whole field instead, so local deletions actually take effect. Falls back
+  // to a merge-set only to bootstrap the document on its very first-ever write.
+  async function saveMapField(fieldName, value){
     if(!isConfigured) return;
-    try{ await eventDocRef.set({ checkins }, { merge: true }); }
-    catch(e){ console.error('Failed to save checkins', e); }
+    try{
+      await eventDocRef.update({ [fieldName]: value });
+    }catch(e){
+      if(e && (e.code === 'not-found' || /No document to update/i.test(e.message || ''))){
+        try{ await eventDocRef.set({ [fieldName]: value }, { merge: true }); }
+        catch(e2){ console.error('Failed to save ' + fieldName + ' (bootstrap)', e2); }
+      } else {
+        console.error('Failed to save ' + fieldName, e);
+      }
+    }
+  }
+
+  async function saveCheckins(){
+    await saveMapField('checkins', checkins);
   }
 
   async function saveClosedSessions(){
-    if(!isConfigured) return;
-    try{ await eventDocRef.set({ closedSessions }, { merge: true }); }
-    catch(e){ console.error('Failed to save closed sessions', e); }
+    await saveMapField('closedSessions', closedSessions);
   }
 
   async function saveDrivers(){
@@ -544,9 +560,7 @@ Alex Kim
   }
 
   async function saveShuttleSchedule(){
-    if(!isConfigured) return;
-    try{ await eventDocRef.set({ shuttleSchedule }, { merge: true }); }
-    catch(e){ console.error('Failed to save shuttle schedule', e); }
+    await saveMapField('shuttleSchedule', shuttleSchedule);
   }
 
   async function clearReservation(key){
@@ -715,8 +729,12 @@ Alex Kim
     await saveCheckins();
     await saveClosedSessions();
     await saveDrivers();
+    await saveShuttleSchedule();
+    await saveMapField('reservations', reservations);
+    await saveMapField('reservationSubmitted', reservationSubmitted);
     if(isConfigured){
-      try{ await eventDocRef.set({ logs: [], shuttleSchedule: {}, reservations: {}, reservationSubmitted: {} }, { merge: true }); }catch(e){ console.error('Failed to clear log/schedule/reservations', e); }
+      try{ await eventDocRef.update({ logs: [] }); }
+      catch(e){ console.error('Failed to clear log', e); }
     }
     el('roster-preview-card').style.display = 'none';
     el('setup-status').textContent = 'Event data reset.';

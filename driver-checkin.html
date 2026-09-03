@@ -203,6 +203,7 @@
   }
   .check-btn.pending{ background: var(--navy-panel-2); color: var(--paper); }
   .check-btn.danger{ background: var(--red); color: var(--navy); }
+  .check-btn.warn-btn{ background: var(--amber); color: var(--navy); }
   .check-btn.done{ background: var(--teal); color: var(--navy); }
 
   /* Dashboard */
@@ -965,8 +966,19 @@
     const shuttle = activeShuttle();
     const onThisShuttle = roster.filter(r => { const c = checkins[checkinKey(session, r.id)]; return c && c.shuttle === shuttle; }).length;
     const totalThisTrip = roster.filter(r => checkins[checkinKey(session, r.id)]).length;
+    const cfg = shuttleSchedule[closedKey(session, shuttle)];
+    let capacityLine = '';
+    if(cfg){
+      const reservedCount = Object.entries(reservations).filter(([k,v]) => k.startsWith(session+'::') && v===shuttle).length;
+      const seatsOpen = Math.max(0, cfg.capacity - onThisShuttle);
+      const openColor = seatsOpen === 0 ? 'var(--red)' : (seatsOpen <= 3 ? 'var(--amber)' : 'var(--teal)');
+      capacityLine = `<div style="font-family:var(--mono); font-size:12px; margin-top:6px; color:var(--ink-soft);">
+        Capacity ${cfg.capacity} · ${reservedCount} reserved · <span style="color:${openColor};">${seatsOpen} seat${seatsOpen===1?'':'s'} still open</span>
+      </div>`;
+    }
     box.innerHTML = `<div class="flip-label">Shuttle ${shuttle} · ${sessionLabel(session)}</div>
-      <div class="flip-value" style="font-size:26px;">${onThisShuttle}<span style="font-size:14px;color:var(--ink-soft);"> on this shuttle · ${totalThisTrip} total this trip</span></div>`;
+      <div class="flip-value" style="font-size:26px;">${onThisShuttle}<span style="font-size:14px;color:var(--ink-soft);"> on this shuttle · ${totalThisTrip} total this trip</span></div>
+      ${capacityLine}`;
   }
 
   function sessionLabel(id){
@@ -1022,19 +1034,22 @@
       if(mismatch) meta += ' · <span style="color:var(--red);">Assigned to Shuttle ' + r.assignedShuttle + '</span>';
       const reservedShuttle = reservations[checkinKey(session, r.id)];
       const resMismatch = !done && reservedShuttle && reservedShuttle !== 'none' && reservedShuttle !== activeShuttle();
+      const noReservationAtAll = !done && reservedShuttle === undefined;
       if(reservedShuttle && reservedShuttle !== 'none' && !done){
         meta += resMismatch
           ? ' · <span style="color:var(--red);">⚠ Reserved Shuttle ' + reservedShuttle + ' — not this one</span>'
           : ' · <span style="color:var(--teal);">Reserved Shuttle ' + reservedShuttle + '</span>';
       }
       if(reservedShuttle === 'none' && !done) meta += ' · <span style="color:var(--ink-soft);">No shuttle reserved</span>';
-      if(reservedShuttle === undefined && !done) meta += ' · <span style="color:var(--amber);">⚠ No reservation on file</span>';
+      if(noReservationAtAll) meta += ' · <span style="color:var(--amber);">⚠ No reservation on file</span>';
+      const btnClass = done ? 'done' : (resMismatch ? 'danger' : (noReservationAtAll ? 'warn-btn' : 'pending'));
+      const btnLabel = done ? 'Undo' : (resMismatch ? 'Wrong Shuttle' : (noReservationAtAll ? 'No Reservation' : 'Check In'));
       return `<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>
           <div class="attendee-meta">${meta}</div>
         </div>
-        <button class="check-btn ${done?'done':(resMismatch?'danger':'pending')}" data-id="${r.id}">${done ? 'Undo' : (resMismatch ? 'Wrong Shuttle' : 'Check In')}</button>
+        <button class="check-btn ${btnClass}" data-id="${r.id}">${btnLabel}</button>
       </div>`;
     }).join('');
     container.querySelectorAll('.check-btn').forEach(btn=>{
@@ -1044,11 +1059,19 @@
 
   let lastScan = null; // { id, name, session, shuttle }
 
-  function reservationMismatch(session, personId, shuttle){
+  function reservationStatus(session, personId, shuttle){
     const res = reservations[checkinKey(session, personId)];
-    if(!res || res === 'none') return null;
-    if(res === shuttle) return null;
-    return res;
+    if(res === undefined) return { status: 'missing' };
+    if(res === 'none') return { status: 'declined' };
+    if(res === shuttle) return { status: 'match' };
+    return { status: 'mismatch', reservedShuttle: res };
+  }
+
+  function seatsOpenOn(session, shuttle){
+    const cfg = shuttleSchedule[closedKey(session, shuttle)];
+    if(!cfg) return null;
+    const boarded = roster.filter(r => { const c = checkins[checkinKey(session, r.id)]; return c && c.shuttle === shuttle; }).length;
+    return Math.max(0, cfg.capacity - boarded);
   }
 
   async function toggleCheckin(id, method){
@@ -1060,9 +1083,15 @@
       appendLog({ logId: genId()+Date.now(), personId: id, name: person ? person.name : id, sessionId: session, shuttle: activeShuttle(), time: Date.now(), action: 'undo', method: method||'tap' });
     } else {
       const shuttle = activeShuttle();
-      const mismatch = reservationMismatch(session, id, shuttle);
-      if(mismatch){
-        const ok = confirm(`${person ? person.name : 'This passenger'} reserved Shuttle ${mismatch} for this trip — you're checking them in on Shuttle ${shuttle}.\n\nOverride and check in here anyway?`);
+      const name = person ? person.name : 'This passenger';
+      const rs = reservationStatus(session, id, shuttle);
+      if(rs.status === 'mismatch'){
+        const ok = confirm(`${name} reserved Shuttle ${rs.reservedShuttle} for this trip — you're checking them in on Shuttle ${shuttle}.\n\nOverride and check in here anyway?`);
+        if(!ok) return;
+      } else if(rs.status === 'missing'){
+        const seatsOpen = seatsOpenOn(session, shuttle);
+        const seatsNote = seatsOpen === null ? '' : (seatsOpen === 0 ? `\n\nThis shuttle shows FULL — no seats currently open.` : `\n\n${seatsOpen} seat(s) currently open on this shuttle.`);
+        const ok = confirm(`${name} has no reservation for this trip.${seatsNote}\n\nCheck them in on Shuttle ${shuttle} anyway?`);
         if(!ok) return;
       }
       checkins[key] = { time: Date.now(), shuttle };
@@ -1214,16 +1243,25 @@
           const key = checkinKey(session, r.id);
           if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn', true); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); pauseAfterScan(); return; }
           const shuttle = activeShuttle();
-          const resMismatch = reservationMismatch(session, r.id, shuttle);
-          if(resMismatch){
-            showFlash(r.name + ' reserved Shuttle ' + resMismatch + ' for this trip — NOT checked in on Shuttle ' + shuttle + '. Use the tap list below to override if this is intentional.', 'warn', true);
+          const rs = reservationStatus(session, r.id, shuttle);
+          if(rs.status === 'mismatch'){
+            showFlash(r.name + ' reserved Shuttle ' + rs.reservedShuttle + ' for this trip — NOT checked in on Shuttle ' + shuttle + '. Use the tap list below to override if this is intentional.', 'warn', true);
             playWarnTone();
             if(navigator.vibrate) navigator.vibrate([80,60,80]);
             renderCheckinList();
             pauseAfterScan();
             return;
           }
-          const noReservation = reservations[key] === undefined;
+          if(rs.status === 'missing'){
+            const seatsOpen = seatsOpenOn(session, shuttle);
+            const seatsNote = seatsOpen === null ? '' : (seatsOpen === 0 ? ' This shuttle shows FULL.' : ' ' + seatsOpen + ' seat(s) open.');
+            showFlash(r.name + ' has no reservation for this trip — NOT checked in.' + seatsNote + ' Use the tap list below to check them in if you have room.', 'warn', true);
+            playWarnTone();
+            if(navigator.vibrate) navigator.vibrate([80,60,80]);
+            renderCheckinList();
+            pauseAfterScan();
+            return;
+          }
           if(r.assignedShuttle && r.assignedShuttle !== shuttle){
             showFlash(r.name + ' is assigned to Shuttle ' + r.assignedShuttle + ', not this one — checking in anyway', 'warn', true);
           }
@@ -1232,14 +1270,10 @@
           appendLog({ logId: genId()+Date.now(), personId: r.id, name: r.name, sessionId: session, shuttle, time: Date.now(), action: 'checkin', method: 'scan' });
           await saveCheckins();
           if(!r.assignedShuttle || r.assignedShuttle === shuttle){
-            if(noReservation){
-              showFlash(r.name + ' checked in — Shuttle ' + shuttle + ' (⚠ no reservation on file for this trip)', 'warn', true);
-            } else {
-              showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok', true);
-            }
+            showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok', true);
           }
-          if(navigator.vibrate) navigator.vibrate(noReservation ? [80,60,80] : 150);
-          if(noReservation){ playWarnTone(); } else { playSuccessTone(); }
+          if(navigator.vibrate) navigator.vibrate(150);
+          playSuccessTone();
           renderCheckinList();
           renderLiveCounter();
           pauseAfterScan();

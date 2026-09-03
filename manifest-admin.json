@@ -1,7 +1,7 @@
 {
-  "name": "Shuttle Reservation",
-  "short_name": "Reserve",
-  "start_url": "./index.html",
+  "name": "Conference Shuttle Admin",
+  "short_name": "Shuttle Admin",
+  "start_url": "./shuttle-admin-7f3k2m.html",
   "display": "standalone",
   "background_color": "#0F1C33",
   "theme_color": "#0F1C33",

@@ -271,9 +271,6 @@
 
   <div class="panel">
 
-    <!-- Hidden: shuttle count is configured in the full admin app; kept here so shared logic keeps working. -->
-    <input type="number" id="shuttle-count" value="3" class="hidden">
-
     <!-- CHECKIN TAB -->
     <div id="tab-checkin" class="tab-content">
       <div class="card">
@@ -353,6 +350,7 @@
   let shuttleSchedule = {}; // {sessionId::shuttle: {time, capacity}} — departure config for reservations
   let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
+  let shuttleCount = 3; // synced from the admin app — kept in sync automatically, no local editing needed here
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -417,7 +415,7 @@
   }
 
   function getShuttleCount(){
-    return Math.max(1, parseInt(el('shuttle-count').value || '3', 10));
+    return shuttleCount;
   }
 
   async function saveRoster(){
@@ -502,6 +500,7 @@
     shuttleSchedule = (data && data.shuttleSchedule) || {};
     reservations = (data && data.reservations) || {};
     reservationSubmitted = (data && data.reservationSubmitted) || {};
+    shuttleCount = (data && data.shuttleCount) || 3;
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
     if(activeTab === 'checkin'){ populateSessionSelects(); populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }

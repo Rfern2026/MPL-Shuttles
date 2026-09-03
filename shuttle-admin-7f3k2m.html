@@ -456,6 +456,7 @@ Alex Kim
   let shuttleSchedule = {}; // {sessionId::shuttle: {time, capacity}} — departure config for reservations
   let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
+  let shuttleCount = 3; // synced across all devices now, not a local-only setting
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -520,7 +521,13 @@ Alex Kim
   }
 
   function getShuttleCount(){
-    return Math.max(1, parseInt(el('shuttle-count').value || '3', 10));
+    return shuttleCount;
+  }
+
+  async function saveShuttleCount(){
+    if(!isConfigured) return;
+    try{ await eventDocRef.set({ shuttleCount }, { merge: true }); }
+    catch(e){ console.error('Failed to save shuttle count', e); }
   }
 
   async function saveRoster(){
@@ -605,6 +612,8 @@ Alex Kim
     shuttleSchedule = (data && data.shuttleSchedule) || {};
     reservations = (data && data.reservations) || {};
     reservationSubmitted = (data && data.reservationSubmitted) || {};
+    shuttleCount = (data && data.shuttleCount) || 3;
+    el('shuttle-count').value = shuttleCount;
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
     renderRosterPreview();
@@ -675,6 +684,22 @@ Alex Kim
     el('setup-status').textContent = `Added ${lines.length}. Roster now has ${roster.length} attendees.`;
     el('names-input').value = '';
     renderRosterPreview();
+  });
+
+  el('shuttle-count').addEventListener('change', async ()=>{
+    const n = Math.max(1, Math.min(10, parseInt(el('shuttle-count').value || '3', 10)));
+    shuttleCount = n;
+    el('shuttle-count').value = n;
+    await saveShuttleCount();
+    el('setup-status').textContent = `Now tracking ${n} shuttle(s) — synced to every device.`;
+    renderRosterPreview();
+    renderDriversPreview();
+    renderShuttleScheduleTable();
+    populateShuttleActive();
+    populateDriverSelect();
+    renderCheckinList();
+    renderLiveCounter();
+    renderDashboard();
   });
 
   function renderRosterPreview(){

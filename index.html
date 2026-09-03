@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Shuttle Reservation</title>
+<title>MP&L Shuttles</title>
 
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Reserve">
+<meta name="apple-mobile-web-app-title" content="MP&L Shuttles">
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -105,7 +105,7 @@
 
 <div id="config-banner" class="hidden">⚠ Firebase isn't configured in this file yet.</div>
 <div class="header">
-  <p class="eyebrow">Shuttle Reservation</p>
+  <p class="eyebrow">MP&L Shuttles</p>
   <h1 id="page-title">Pick Your Shuttles</h1>
 </div>
 
@@ -125,6 +125,15 @@
       <div id="identity-pending-actions" class="row" style="gap:10px;">
         <button class="btn" id="identity-confirm-yes-btn">Yes, that's me</button>
         <button class="btn secondary" id="identity-confirm-no-btn">Not me — search again</button>
+      </div>
+      <div id="identity-phone-step" class="hidden">
+        <p class="muted" style="margin-bottom:10px;">This reservation is already submitted. Enter the last 4 digits of your phone number to view it.</p>
+        <label for="identity-phone-input">Last 4 digits of your phone number</label>
+        <input type="text" id="identity-phone-input" placeholder="1234" maxlength="4" inputmode="numeric" autocomplete="off">
+        <div class="row" style="gap:10px;">
+          <button class="btn" id="identity-phone-submit-btn">View My Reservation</button>
+          <button class="btn secondary" id="identity-confirm-no-btn-3">Not me — search again</button>
+        </div>
       </div>
       <div id="identity-verified-line" class="hidden row" style="gap:10px;">
         <button class="btn secondary" id="identity-confirm-no-btn-2">Not you? Tap here</button>
@@ -252,6 +261,7 @@
     el('identity-confirm-block').classList.remove('hidden');
     el('identity-confirm-name').textContent = person ? person.name : '';
     el('identity-pending-actions').classList.add('hidden');
+    el('identity-phone-step').classList.add('hidden');
     el('identity-verified-line').classList.remove('hidden');
     renderMainFlow();
   }
@@ -262,9 +272,46 @@
     el('identity-search-block').classList.add('hidden');
     el('identity-confirm-block').classList.remove('hidden');
     el('identity-confirm-name').textContent = person ? person.name : '';
-    el('identity-pending-actions').classList.remove('hidden');
     el('identity-verified-line').classList.add('hidden');
+    el('flash-area').innerHTML = '';
+    if(reservationSubmitted[personId]){
+      // Already booked — require the extra phone check before revealing what they picked.
+      el('identity-pending-actions').classList.add('hidden');
+      el('identity-phone-step').classList.remove('hidden');
+      el('identity-phone-input').value = '';
+      el('identity-phone-input').focus();
+    } else {
+      // Not booked yet — keep it simple, no extra check needed to start booking.
+      el('identity-pending-actions').classList.remove('hidden');
+      el('identity-phone-step').classList.add('hidden');
+    }
   }
+
+  function attemptPhoneVerification(){
+    if(!pendingPersonId) return;
+    const person = roster.find(r=>r.id===pendingPersonId);
+    if(!person) return;
+    const entered = el('identity-phone-input').value.replace(/\D/g, '');
+    if(!person.phone){
+      showFlash('Phone verification isn\u2019t set up for you yet. Contact the event organizer to look up your reservation.', 'warn');
+      return;
+    }
+    if(entered.length !== 4){
+      showFlash('Enter all 4 digits.', 'warn');
+      return;
+    }
+    if(entered !== person.phone){
+      showFlash('That doesn\u2019t match our records. Check the number and try again, or contact the event organizer.', 'warn');
+      return;
+    }
+    selectedPersonId = pendingPersonId;
+    localStorage.setItem('shuttle_reservation_person_id', selectedPersonId);
+    showIdentityConfirmed();
+  }
+
+  el('identity-phone-submit-btn').addEventListener('click', attemptPhoneVerification);
+  el('identity-phone-input').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') attemptPhoneVerification(); });
+  el('identity-confirm-no-btn-3').addEventListener('click', showIdentitySearch);
 
   function showIdentitySearch(){
     selectedPersonId = null;
@@ -286,19 +333,12 @@
     const box = el('passenger-suggestions');
     const q = query.trim().toLowerCase();
     if(q.length === 0){ box.innerHTML = ''; return; }
-    const allMatches = roster.filter(r => r.name.toLowerCase().includes(q));
-    const matches = allMatches.filter(r => !reservationSubmitted[r.id]).slice(0, 8);
+    const matches = roster.filter(r => r.name.toLowerCase().includes(q)).slice(0, 8);
     if(matches.length === 0){
-      if(allMatches.length > 0){
-        // Every name matching this search has already submitted — hidden from search on purpose,
-        // so someone else typing their name can't see their choices.
-        box.innerHTML = '<div class="suggestion-empty">If this is you and you already submitted, reopen this page on the same device/browser you used before — it\u2019ll recognize you automatically. Otherwise contact the event organizer.</div>';
-      } else {
-        box.innerHTML = '<div class="suggestion-empty">No matching name on the passenger list. Check your spelling, or contact the event organizer.</div>';
-      }
+      box.innerHTML = '<div class="suggestion-empty">No matching name on the passenger list. Check your spelling, or contact the event organizer.</div>';
       return;
     }
-    box.innerHTML = matches.map(r=>`<div class="suggestion-item" data-id="${r.id}">${escapeHtml(r.name)}</div>`).join('');
+    box.innerHTML = matches.map(r=>`<div class="suggestion-item" data-id="${r.id}">${escapeHtml(r.name)}${reservationSubmitted[r.id] ? ' <span style="color:var(--ink-soft); font-size:12px;">(already booked)</span>' : ''}</div>`).join('');
     box.querySelectorAll('.suggestion-item').forEach(item=>{
       item.addEventListener('click', ()=> showIdentityPending(item.dataset.id));
     });

@@ -1,6 +1,6 @@
 {
-  "name": "Shuttle Reservation",
-  "short_name": "Reserve",
+  "name": "MP&L Shuttles",
+  "short_name": "MP&L Shuttles",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0F1C33",

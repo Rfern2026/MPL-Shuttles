@@ -405,6 +405,14 @@ Alex Kim
         <p class="muted" style="margin-top:-6px;">Send passengers the reserve.html link (set up alongside this file) so they can pick a departure time themselves. This tab shows who reserved what — it's read-only except for clearing a reservation if someone needs to be freed up.</p>
         <select id="reservations-session-select" style="margin-bottom:0; width:auto;"></select>
       </div>
+      <div class="card">
+        <h2>Reset a passenger</h2>
+        <p class="muted" style="margin-top:-6px;">Fully unlocks someone to start their reservation over from scratch — clears every trip they picked (or skipped) across all trips, not just this one. Use this if a test reservation needs redoing, or someone needs a completely fresh start.</p>
+        <div class="row">
+          <select id="reset-passenger-select" style="margin-bottom:0; flex:1; min-width:160px;"></select>
+          <button class="btn danger" id="reset-passenger-btn">Reset This Passenger</button>
+        </div>
+      </div>
       <div id="reservations-body"></div>
     </div>
 
@@ -433,6 +441,7 @@ Alex Kim
   let drivers = [];        // [{id, name, shuttle}]
   let shuttleSchedule = {}; // {sessionId::shuttle: {time, capacity}} — departure config for reservations
   let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
+  let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -542,6 +551,16 @@ Alex Kim
     catch(e){ console.error('Failed to update reservation', e); }
   }
 
+  async function resetPassengerReservations(personId){
+    if(!isConfigured) return;
+    const updates = { ['reservationSubmitted.' + personId]: firebase.firestore.FieldValue.delete() };
+    SESSIONS.forEach(s=>{
+      updates['reservations.' + checkinKey(s.id, personId)] = firebase.firestore.FieldValue.delete();
+    });
+    try{ await eventDocRef.update(updates); }
+    catch(e){ console.error('Failed to reset passenger reservations', e); }
+  }
+
   async function appendLog(entry){
     if(!isConfigured) return;
     try{
@@ -557,6 +576,7 @@ Alex Kim
     drivers = (data && data.drivers) || [];
     shuttleSchedule = (data && data.shuttleSchedule) || {};
     reservations = (data && data.reservations) || {};
+    reservationSubmitted = (data && data.reservationSubmitted) || {};
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
     renderRosterPreview();
@@ -803,6 +823,22 @@ Alex Kim
     const letters = shuttleLetters(getShuttleCount());
     const body = el('reservations-body');
     if(!dataLoaded){ body.innerHTML = '<p class="muted">Loading…</p>'; return; }
+
+    // Reset-a-passenger control: independent of which trip is currently selected above.
+    const resetSel = el('reset-passenger-select');
+    resetSel.innerHTML = '<option value="">— Select Passenger —</option>' +
+      roster.slice().sort((a,b)=>a.name.localeCompare(b.name))
+        .map(r=>`<option value="${r.id}">${escapeHtml(r.name)}${reservationSubmitted[r.id] ? ' (submitted)' : ''}</option>`).join('');
+    el('reset-passenger-btn').onclick = async ()=>{
+      const pid = resetSel.value;
+      if(!pid) return;
+      const person = roster.find(r=>r.id===pid);
+      if(!confirm(`Reset ${person ? person.name : 'this passenger'}? This clears every trip they picked or skipped, and lets them go through the whole reservation flow again from scratch.`)) return;
+      delete reservationSubmitted[pid];
+      SESSIONS.forEach(s=>{ delete reservations[checkinKey(s.id, pid)]; });
+      await resetPassengerReservations(pid);
+      renderReservationsTab();
+    };
 
     const configuredLetters = letters.filter(l => shuttleSchedule[closedKey(session, l)]);
     if(configuredLetters.length === 0){

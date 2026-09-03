@@ -398,6 +398,7 @@ Alex Kim
         <div class="row">
           <select id="log-session-filter" style="margin-bottom:0; width:auto;"><option value="all">All Trips</option></select>
           <input type="text" id="log-search" placeholder="Search by name..." style="margin-bottom:0; width:auto; flex:1; min-width:160px;">
+          <button class="btn danger" id="clear-log-btn">Clear Log</button>
         </div>
         <div id="log-list"></div>
       </div>
@@ -1530,6 +1531,16 @@ Alex Kim
 
   el('log-session-filter').addEventListener('change', renderLog);
   el('log-search').addEventListener('input', renderLog);
+
+  el('clear-log-btn').addEventListener('click', async ()=>{
+    if(!confirm('Clear the entire scan log? This only clears the log itself — the passenger list, check-ins, drivers, and reservations are untouched. Cannot be undone.')) return;
+    logs = [];
+    if(isConfigured){
+      try{ await eventDocRef.set({ logs: [] }, { merge: true }); }
+      catch(e){ console.error('Failed to clear log', e); }
+    }
+    renderLog();
+  });
 
   function renderLog(){
     populateLogFilter();

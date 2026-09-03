@@ -973,7 +973,7 @@
       const seatsOpen = Math.max(0, cfg.capacity - onThisShuttle);
       const openColor = seatsOpen === 0 ? 'var(--red)' : (seatsOpen <= 3 ? 'var(--amber)' : 'var(--teal)');
       capacityLine = `<div style="font-family:var(--mono); font-size:12px; margin-top:6px; color:var(--ink-soft);">
-        Capacity ${cfg.capacity} · ${reservedCount} reserved · <span style="color:${openColor};">${seatsOpen} seat${seatsOpen===1?'':'s'} still open</span>
+        Capacity ${cfg.capacity + 1} <span style="opacity:0.7;">(${cfg.capacity} passenger + driver)</span> · ${reservedCount} reserved · <span style="color:${openColor};">${seatsOpen} seat${seatsOpen===1?'':'s'} still open</span>
       </div>`;
     }
     box.innerHTML = `<div class="flip-label">Shuttle ${shuttle} · ${sessionLabel(session)}</div>

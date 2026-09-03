@@ -882,7 +882,12 @@ Alex Kim
         const cfg = shuttleSchedule[closedKey(session, l)];
         const names = roster.filter(r => reservations[checkinKey(session, r.id)] === l)
           .map(r=>r.name).sort((a,b)=>a.localeCompare(b));
-        printHtml += `<h3 style="margin:18px 0 6px 0; border-bottom:2px solid #000; padding-bottom:4px;">Shuttle ${l} — ${escapeHtml(cfg.time)} (${names.length} / ${cfg.capacity})</h3>`;
+        const shuttleDrivers = drivers.filter(d => d.shuttle === l).map(d=>d.name);
+        const driverLine = shuttleDrivers.length > 0
+          ? `<p style="margin:2px 0 8px 0; font-weight:600;">Driver: ${escapeHtml(shuttleDrivers.join(', '))}</p>`
+          : `<p style="margin:2px 0 8px 0; color:#a00;">Driver: not yet assigned</p>`;
+        printHtml += `<h3 style="margin:18px 0 2px 0; border-bottom:2px solid #000; padding-bottom:4px;">Shuttle ${l} — ${escapeHtml(cfg.time)} (${names.length} / ${cfg.capacity} passenger seats · ${cfg.capacity + 1} total incl. driver)</h3>`;
+        printHtml += driverLine;
         if(names.length === 0){
           printHtml += '<p style="color:#777;">No reservations yet.</p>';
         } else {
@@ -1157,7 +1162,7 @@ Alex Kim
       const seatsOpen = Math.max(0, cfg.capacity - onThisShuttle);
       const openColor = seatsOpen === 0 ? 'var(--red)' : (seatsOpen <= 3 ? 'var(--amber)' : 'var(--teal)');
       capacityLine = `<div style="font-family:var(--mono); font-size:12px; margin-top:6px; color:var(--ink-soft);">
-        Capacity ${cfg.capacity} · ${reservedCount} reserved · <span style="color:${openColor};">${seatsOpen} seat${seatsOpen===1?'':'s'} still open</span>
+        Capacity ${cfg.capacity + 1} <span style="opacity:0.7;">(${cfg.capacity} passenger + driver)</span> · ${reservedCount} reserved · <span style="color:${openColor};">${seatsOpen} seat${seatsOpen===1?'':'s'} still open</span>
       </div>`;
     }
     box.innerHTML = `<div class="flip-label">Shuttle ${shuttle} · ${sessionLabel(session)}</div>

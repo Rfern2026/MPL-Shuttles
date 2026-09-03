@@ -1014,6 +1014,7 @@
           : ' · <span style="color:var(--teal);">Reserved Shuttle ' + reservedShuttle + '</span>';
       }
       if(reservedShuttle === 'none' && !done) meta += ' · <span style="color:var(--ink-soft);">No shuttle reserved</span>';
+      if(reservedShuttle === undefined && !done) meta += ' · <span style="color:var(--amber);">⚠ No reservation on file</span>';
       return `<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>
@@ -1208,6 +1209,7 @@
             pauseAfterScan();
             return;
           }
+          const noReservation = reservations[key] === undefined;
           if(r.assignedShuttle && r.assignedShuttle !== shuttle){
             showFlash(r.name + ' is assigned to Shuttle ' + r.assignedShuttle + ', not this one — checking in anyway', 'warn', true);
           }
@@ -1216,10 +1218,14 @@
           appendLog({ logId: genId()+Date.now(), personId: r.id, name: r.name, sessionId: session, shuttle, time: Date.now(), action: 'checkin', method: 'scan' });
           await saveCheckins();
           if(!r.assignedShuttle || r.assignedShuttle === shuttle){
-            showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok', true);
+            if(noReservation){
+              showFlash(r.name + ' checked in — Shuttle ' + shuttle + ' (⚠ no reservation on file for this trip)', 'warn', true);
+            } else {
+              showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok', true);
+            }
           }
-          if(navigator.vibrate) navigator.vibrate(150);
-          playSuccessTone();
+          if(navigator.vibrate) navigator.vibrate(noReservation ? [80,60,80] : 150);
+          if(noReservation){ playWarnTone(); } else { playSuccessTone(); }
           renderCheckinList();
           renderLiveCounter();
           pauseAfterScan();

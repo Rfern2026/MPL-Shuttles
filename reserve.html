@@ -45,10 +45,11 @@
   .departure-option{
     display:flex; justify-content:space-between; align-items:center;
     background: var(--navy); border: 1px solid var(--navy-panel-2); border-radius: 8px;
-    padding: 14px 16px; margin-bottom: 10px;
+    padding: 14px 16px; margin-bottom: 10px; cursor: pointer;
   }
   .departure-option.selected{ border-color: var(--teal); background: rgba(63,217,192,0.08); }
-  .departure-option.full{ opacity: 0.5; }
+  .departure-option.skip-selected{ border-color: var(--ink-soft); background: rgba(74,90,120,0.15); }
+  .departure-option.full{ opacity: 0.5; cursor: default; }
   .departure-name{ font-weight: 600; font-size: 15px; }
   .departure-seats{ font-family: var(--mono); font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
   .departure-seats.low{ color: var(--amber); }
@@ -60,6 +61,9 @@
   }
   .btn:disabled{ opacity: 0.4; cursor: not-allowed; }
   .btn.current{ background: var(--teal); }
+  .btn.secondary{ background: transparent; color: var(--paper); border: 1px solid var(--navy-panel-2); }
+  .btn.danger{ background: var(--red); color: var(--navy); }
+  .btn.full-width{ width: 100%; margin-top: 6px; }
   .flash{
     padding: 12px 14px; border-radius: 8px; font-family: var(--mono); font-size: 13px; margin-bottom: 14px;
   }
@@ -70,6 +74,20 @@
     padding: 10px 20px; text-align: center; font-weight: 700;
   }
   .hidden{ display:none !important; }
+  .summary-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 12px 0; border-bottom: 1px solid var(--navy-panel-2);
+  }
+  .summary-row:last-child{ border-bottom: none; }
+  .summary-trip{ font-weight: 600; font-size: 14px; }
+  .summary-choice{ font-family: var(--mono); font-size: 12px; margin-top: 2px; }
+  .summary-choice.chosen{ color: var(--teal); }
+  .summary-choice.skipped{ color: var(--ink-soft); }
+  .summary-choice.missing{ color: var(--amber); }
+  .missing-trip-item{
+    padding: 8px 12px; background: rgba(255,176,32,0.1); border: 1px solid var(--amber);
+    border-radius: 6px; margin-bottom: 8px; font-size: 14px;
+  }
 </style>
 </head>
 <body>
@@ -77,11 +95,13 @@
 <div id="config-banner" class="hidden">⚠ Firebase isn't configured in this file yet.</div>
 <div class="header">
   <p class="eyebrow">Shuttle Reservation</p>
-  <h1>Pick Your Departure</h1>
+  <h1 id="page-title">Pick Your Shuttles</h1>
 </div>
 
 <div class="panel">
-  <div class="card">
+
+  <!-- STEP 1: IDENTITY -->
+  <div class="card" id="identity-card">
     <h2>1 · Who are you?</h2>
     <div id="identity-search-block">
       <label for="passenger-search">Type your name</label>
@@ -91,34 +111,53 @@
     <div id="identity-confirm-block" class="hidden">
       <p class="muted" style="margin-bottom:10px;">You selected:</p>
       <p style="font-size:18px; font-weight:700; margin:0 0 14px 0;" id="identity-confirm-name"></p>
-      <div id="identity-phone-step">
-        <label for="identity-phone-input">Last 4 digits of your phone number</label>
-        <input type="text" id="identity-phone-input" placeholder="1234" maxlength="4" inputmode="numeric" autocomplete="off">
-        <div class="row" style="gap:10px;">
-          <button class="btn" id="identity-phone-submit-btn">Confirm</button>
-          <button class="btn secondary" id="identity-confirm-no-btn">Not me — search again</button>
-        </div>
+      <div id="identity-pending-actions" class="row" style="gap:10px;">
+        <button class="btn" id="identity-confirm-yes-btn">Yes, that's me</button>
+        <button class="btn secondary" id="identity-confirm-no-btn">Not me — search again</button>
       </div>
-      <div id="identity-verified-line" class="hidden">
-        <div class="row" style="gap:10px;">
-          <button class="btn secondary" id="identity-confirm-no-btn-2">Not you? Tap here</button>
-        </div>
+      <div id="identity-verified-line" class="hidden row" style="gap:10px;">
+        <button class="btn secondary" id="identity-confirm-no-btn-2">Not you? Tap here</button>
       </div>
     </div>
   </div>
 
-  <div class="card" id="trip-card" style="display:none;">
-    <h2>2 · Choose a trip</h2>
-    <label for="trip-select">Trip</label>
-    <select id="trip-select"></select>
-  </div>
-
   <div id="flash-area"></div>
 
-  <div class="card" id="departures-card" style="display:none;">
-    <h2 id="departures-title">3 · Choose your departure</h2>
-    <div id="departures-list"></div>
+  <!-- ALREADY SUBMITTED / LOCKED VIEW -->
+  <div class="card hidden" id="locked-view">
+    <h2>Your Reservations</h2>
+    <p class="muted" style="margin-top:-6px;">Submitted and locked in. If you need to change anything, contact the event organizer.</p>
+    <div id="locked-list"></div>
   </div>
+
+  <!-- SELECTION FLOW (one card per reservable trip) -->
+  <div id="selection-flow" class="hidden">
+    <p class="muted" style="margin: 0 0 16px 0;">Pick a shuttle for each trip below, or mark a trip as not needed. Nothing is saved until you review and confirm at the end.</p>
+    <div id="trip-cards"></div>
+    <button class="btn full-width" id="review-btn">Review My Selections</button>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="card hidden" id="summary-card">
+    <h2>Review Your Selections</h2>
+    <div id="summary-list"></div>
+    <div class="row" style="margin-top:16px; gap:10px;">
+      <button class="btn" id="confirm-save-btn">Confirm &amp; Save</button>
+      <button class="btn secondary" id="back-to-edit-btn">Back to Edit</button>
+    </div>
+  </div>
+
+  <!-- MISSING-TRIP CONFIRMATION -->
+  <div class="card hidden" id="missing-confirm-card">
+    <h2>Are You Sure?</h2>
+    <p class="muted" style="margin-top:-6px;">You haven't picked a shuttle for the trip(s) below. If you don't need a shuttle for these, confirm and we'll record that. Otherwise go back and pick one.</p>
+    <div id="missing-trip-list"></div>
+    <div class="row" style="margin-top:14px; gap:10px;">
+      <button class="btn danger" id="missing-confirm-yes-btn">Yes, I don't need these — Save</button>
+      <button class="btn secondary" id="missing-confirm-back-btn">Go Back and Select</button>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -155,6 +194,7 @@
     { id: 'd2-eve-dinner', label: 'Day 2 · Evening to Dinner' },
     { id: 'd2-eve-hotel', label: 'Day 2 · Evening to Hotel' }
   ];
+  const SKIP = 'none'; // sentinel value meaning "explicitly no shuttle needed for this trip"
   const closedKey = (sessionId, shuttle) => sessionId + '::' + shuttle;
   const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
   const el = id => document.getElementById(id);
@@ -162,6 +202,7 @@
   let roster = [];
   let shuttleSchedule = {};
   let reservations = {};
+  let reservationSubmitted = {};
   let dataLoaded = false;
 
   function escapeHtml(s){
@@ -172,18 +213,33 @@
     el('flash-area').innerHTML = `<div class="flash ${type}">${msg}</div>`;
   }
 
-  // ---- Identity: type-to-search + mandatory confirmation (no dropdown to misclick in) ----
+  function sessionLabel(id){
+    const s = SESSIONS.find(x=>x.id===id);
+    return s ? s.label : id;
+  }
+
+  function shuttlesConfiguredFor(sessionId){
+    const letters = 'ABCDEFGHIJ'.split('');
+    return letters.filter(l => shuttleSchedule[closedKey(sessionId, l)]);
+  }
+
+  function reservableTrips(){
+    return SESSIONS.filter(s => shuttlesConfiguredFor(s.id).length > 0);
+  }
+
+  // ---- Identity: type-to-search + mandatory confirmation ----
   let selectedPersonId = null;
   let pendingPersonId = null;
+  let tentativeSelections = {}; // sessionId -> shuttle letter or SKIP, held locally until saved
 
   function showIdentityConfirmed(){
     const person = roster.find(r=>r.id===selectedPersonId);
     el('identity-search-block').classList.add('hidden');
     el('identity-confirm-block').classList.remove('hidden');
     el('identity-confirm-name').textContent = person ? person.name : '';
-    el('identity-phone-step').classList.add('hidden');
+    el('identity-pending-actions').classList.add('hidden');
     el('identity-verified-line').classList.remove('hidden');
-    el('trip-card').style.display = 'block';
+    renderMainFlow();
   }
 
   function showIdentityPending(personId){
@@ -192,24 +248,24 @@
     el('identity-search-block').classList.add('hidden');
     el('identity-confirm-block').classList.remove('hidden');
     el('identity-confirm-name').textContent = person ? person.name : '';
-    el('identity-phone-step').classList.remove('hidden');
+    el('identity-pending-actions').classList.remove('hidden');
     el('identity-verified-line').classList.add('hidden');
-    el('identity-phone-input').value = '';
-    el('flash-area').innerHTML = '';
-    el('identity-phone-input').focus();
   }
 
   function showIdentitySearch(){
     selectedPersonId = null;
     pendingPersonId = null;
+    tentativeSelections = {};
     localStorage.removeItem('shuttle_reservation_person_id');
     el('identity-confirm-block').classList.add('hidden');
     el('identity-search-block').classList.remove('hidden');
     el('passenger-search').value = '';
     el('passenger-suggestions').innerHTML = '';
-    el('trip-card').style.display = 'none';
-    el('departures-card').style.display = 'none';
     el('flash-area').innerHTML = '';
+    el('locked-view').classList.add('hidden');
+    el('selection-flow').classList.add('hidden');
+    el('summary-card').classList.add('hidden');
+    el('missing-confirm-card').classList.add('hidden');
   }
 
   function renderSuggestions(query){
@@ -229,36 +285,17 @@
 
   el('passenger-search').addEventListener('input', ()=> renderSuggestions(el('passenger-search').value));
 
-  function attemptPhoneVerification(){
+  el('identity-confirm-yes-btn').addEventListener('click', ()=>{
     if(!pendingPersonId) return;
-    const person = roster.find(r=>r.id===pendingPersonId);
-    if(!person) return;
-    const entered = el('identity-phone-input').value.replace(/\D/g, '');
-    if(!person.phone){
-      showFlash('Phone verification isn\u2019t set up for you yet. Contact the event organizer to reserve on your behalf, or ask them to add your number.', 'warn');
-      return;
-    }
-    if(entered.length !== 4){
-      showFlash('Enter all 4 digits.', 'warn');
-      return;
-    }
-    if(entered !== person.phone){
-      showFlash('That doesn\u2019t match our records. Check the number and try again, or contact the event organizer.', 'warn');
-      return;
-    }
     selectedPersonId = pendingPersonId;
     localStorage.setItem('shuttle_reservation_person_id', selectedPersonId);
     showIdentityConfirmed();
-    renderDepartures();
-  }
-
-  el('identity-phone-submit-btn').addEventListener('click', attemptPhoneVerification);
-  el('identity-phone-input').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') attemptPhoneVerification(); });
+  });
   el('identity-confirm-no-btn').addEventListener('click', showIdentitySearch);
   el('identity-confirm-no-btn-2').addEventListener('click', showIdentitySearch);
 
   function restoreIdentityFromStorage(){
-    if(selectedPersonId) return; // already active this session
+    if(selectedPersonId) return;
     const stored = localStorage.getItem('shuttle_reservation_person_id');
     if(stored && roster.some(r=>r.id===stored)){
       selectedPersonId = stored;
@@ -266,117 +303,196 @@
     }
   }
 
-  function populateTripSelect(){
-    const sel = el('trip-select');
-    if(sel.options.length > 0) return; // populate once
-    sel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
-  }
+  // ---- Main flow: locked view OR selection flow ----
+  function renderMainFlow(){
+    if(!selectedPersonId || !dataLoaded) return;
+    const trips = reservableTrips();
 
-  function shuttlesConfiguredFor(sessionId){
-    // Any shuttle letter A-J that has a schedule entry for this session
-    const letters = 'ABCDEFGHIJ'.split('');
-    return letters.filter(l => shuttleSchedule[closedKey(sessionId, l)]);
-  }
+    if(trips.length === 0){
+      el('locked-view').classList.add('hidden');
+      el('selection-flow').classList.remove('hidden');
+      el('trip-cards').innerHTML = '<div class="card"><p class="muted">Reservations aren\u2019t open yet for any trip. Check back later or ask the event organizer.</p></div>';
+      el('review-btn').style.display = 'none';
+      el('summary-card').classList.add('hidden');
+      el('missing-confirm-card').classList.add('hidden');
+      return;
+    }
+    el('review-btn').style.display = 'block';
 
-  function renderDepartures(){
-    const personId = selectedPersonId;
-    const sessionId = el('trip-select').value;
-    el('flash-area').innerHTML = '';
-    if(!personId || !sessionId){ el('departures-card').style.display = 'none'; return; }
-    if(!dataLoaded){ el('departures-card').style.display = 'none'; return; }
-
-    const letters = shuttlesConfiguredFor(sessionId);
-    const sessionLabel = (SESSIONS.find(s=>s.id===sessionId) || {}).label || sessionId;
-
-    if(letters.length === 0){
-      el('departures-title').textContent = '3 · Choose your departure — ' + sessionLabel;
-      el('departures-card').style.display = 'block';
-      el('departures-list').innerHTML = '<p class="muted">Reservations aren\u2019t open for this trip yet. Check back later or ask the event organizer.</p>';
+    if(reservationSubmitted[selectedPersonId]){
+      renderLockedView(trips);
       return;
     }
 
-    const myKey = checkinKey(sessionId, personId);
-    const myReservation = reservations[myKey];
-    el('departures-card').style.display = 'block';
+    el('locked-view').classList.add('hidden');
+    el('summary-card').classList.add('hidden');
+    el('missing-confirm-card').classList.add('hidden');
+    el('selection-flow').classList.remove('hidden');
+    renderTripCards(trips);
+  }
 
-    // Once reserved, lock it — no self-service changes. Only an admin clearing/reassigning it reopens this.
-    if(myReservation){
-      const cfg = shuttleSchedule[closedKey(sessionId, myReservation)];
-      el('departures-title').textContent = 'Your Reservation — ' + sessionLabel;
-      el('departures-list').innerHTML = `
-        <div class="departure-option selected">
+  function renderLockedView(trips){
+    el('selection-flow').classList.add('hidden');
+    el('summary-card').classList.add('hidden');
+    el('missing-confirm-card').classList.add('hidden');
+    el('locked-view').classList.remove('hidden');
+    el('locked-list').innerHTML = trips.map(s=>{
+      const key = checkinKey(s.id, selectedPersonId);
+      const val = reservations[key];
+      let text, cls;
+      if(!val){ text = 'Not recorded'; cls = 'missing'; }
+      else if(val === SKIP){ text = 'No shuttle needed'; cls = 'skipped'; }
+      else{
+        const cfg = shuttleSchedule[closedKey(s.id, val)];
+        text = (cfg ? cfg.time + ' · ' : '') + 'Shuttle ' + val;
+        cls = 'chosen';
+      }
+      return `<div class="summary-row">
+        <div class="summary-trip">${escapeHtml(s.label)}</div>
+        <div class="summary-choice ${cls}">${text}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderTripCards(trips){
+    const container = el('trip-cards');
+    container.innerHTML = trips.map(s=>{
+      const letters = shuttlesConfiguredFor(s.id);
+      const current = tentativeSelections[s.id];
+      const options = letters.map(l=>{
+        const cfg = shuttleSchedule[closedKey(s.id, l)];
+        const count = Object.entries(reservations).filter(([k,v]) => k.startsWith(s.id+'::') && v===l).length;
+        const seatsLeft = Math.max(0, cfg.capacity - count);
+        const isFull = seatsLeft <= 0 && current !== l;
+        let seatsClass = '';
+        if(seatsLeft === 0) seatsClass = 'full';
+        else if(seatsLeft <= 3) seatsClass = 'low';
+        return `<div class="departure-option ${current===l ? 'selected' : ''} ${isFull ? 'full' : ''}" data-session="${s.id}" data-shuttle="${l}">
           <div>
-            <div class="departure-name">${cfg ? escapeHtml(cfg.time) : ''} · Shuttle ${myReservation}</div>
-            <div class="departure-seats" style="color:var(--teal);">Confirmed</div>
+            <div class="departure-name">${escapeHtml(cfg.time)} · Shuttle ${l}</div>
+            <div class="departure-seats ${seatsClass}">${isFull ? 'Full' : seatsLeft + ' seat' + (seatsLeft===1?'':'s') + ' left'}</div>
           </div>
-          <button class="btn current" disabled>Reserved ✓</button>
-        </div>
-        <p class="muted" style="margin-top:10px;">Your reservation is locked in. If you need to change it, contact the event organizer — they can update it on their end.</p>`;
-      return;
-    }
-
-    el('departures-title').textContent = '3 · Choose your departure — ' + sessionLabel;
-    el('departures-list').innerHTML = letters.map(l=>{
-      const cfg = shuttleSchedule[closedKey(sessionId, l)];
-      const count = Object.entries(reservations).filter(([k,v]) => k.startsWith(sessionId+'::') && v===l).length;
-      const seatsLeft = Math.max(0, cfg.capacity - count);
-      const isFull = seatsLeft <= 0;
-      let seatsClass = '';
-      if(seatsLeft === 0) seatsClass = 'full';
-      else if(seatsLeft <= 3) seatsClass = 'low';
-      return `<div class="departure-option ${isFull ? 'full' : ''}">
+          <span style="font-family:var(--mono); font-size:11px; color:${current===l?'var(--teal)':'var(--ink-soft)'};">${current===l ? 'Selected' : (isFull ? 'Full' : 'Choose')}</span>
+        </div>`;
+      }).join('');
+      const skipOption = `<div class="departure-option ${current===SKIP ? 'skip-selected' : ''}" data-session="${s.id}" data-shuttle="${SKIP}">
         <div>
-          <div class="departure-name">${escapeHtml(cfg.time)} · Shuttle ${l}</div>
-          <div class="departure-seats ${seatsClass}">${isFull ? 'Full' : seatsLeft + ' seat' + (seatsLeft===1?'':'s') + ' left'}</div>
+          <div class="departure-name">No shuttle needed</div>
+          <div class="departure-seats">I don\u2019t need a ride for this trip</div>
         </div>
-        <button class="btn" data-shuttle="${l}" ${isFull ? 'disabled' : ''}>Reserve</button>
+        <span style="font-family:var(--mono); font-size:11px; color:${current===SKIP?'var(--teal)':'var(--ink-soft)'};">${current===SKIP ? 'Selected' : 'Choose'}</span>
+      </div>`;
+      return `<div class="card">
+        <h2>${escapeHtml(s.label)}</h2>
+        ${options}
+        ${skipOption}
       </div>`;
     }).join('');
 
-    el('departures-list').querySelectorAll('button[data-shuttle]').forEach(btn=>{
-      btn.addEventListener('click', ()=> reserveShuttle(sessionId, personId, btn.dataset.shuttle));
+    container.querySelectorAll('.departure-option').forEach(opt=>{
+      opt.addEventListener('click', ()=>{
+        if(opt.classList.contains('full')) return;
+        tentativeSelections[opt.dataset.session] = opt.dataset.shuttle;
+        renderTripCards(trips);
+      });
     });
   }
 
-  async function reserveShuttle(sessionId, personId, shuttle){
-    if(!isConfigured) return;
-    const key = checkinKey(sessionId, personId);
-    if(reservations[key]){
-      // Reservations are locked once made — this guards against a stale cached page
-      // still showing selectable buttons. Changes go through the organizer only.
-      showFlash('You already have a reservation for this trip. Contact the event organizer to change it.', 'warn');
-      renderDepartures();
-      return;
-    }
-    // Re-check capacity against the latest local snapshot right before writing —
-    // narrows the race window without needing a full transaction for this scale of event.
-    const cfg = shuttleSchedule[closedKey(sessionId, shuttle)];
-    const count = Object.entries(reservations).filter(([k,v]) => k.startsWith(sessionId+'::') && v===shuttle).length;
-    if(cfg && count >= cfg.capacity){
-      showFlash('Sorry — that departure just filled up. Pick another.', 'warn');
-      renderDepartures();
-      return;
-    }
-    try{
-      await eventDocRef.update({ ['reservations.' + key]: shuttle });
-      localStorage.setItem('shuttle_reservation_person_id', personId);
-      showFlash('Reservation confirmed — ' + cfg.time + ' · Shuttle ' + shuttle + '.', 'ok');
-    }catch(e){
-      console.error('Reservation failed', e);
-      showFlash('Something went wrong saving your reservation. Try again.', 'warn');
-    }
+  el('review-btn').addEventListener('click', ()=>{
+    renderSummary();
+  });
+
+  function renderSummary(){
+    const trips = reservableTrips();
+    el('selection-flow').classList.add('hidden');
+    el('missing-confirm-card').classList.add('hidden');
+    el('summary-card').classList.remove('hidden');
+    el('summary-list').innerHTML = trips.map(s=>{
+      const val = tentativeSelections[s.id];
+      let text, cls;
+      if(!val){ text = 'Not selected yet'; cls = 'missing'; }
+      else if(val === SKIP){ text = 'No shuttle needed'; cls = 'skipped'; }
+      else{
+        const cfg = shuttleSchedule[closedKey(s.id, val)];
+        text = (cfg ? cfg.time + ' · ' : '') + 'Shuttle ' + val;
+        cls = 'chosen';
+      }
+      return `<div class="summary-row">
+        <div class="summary-trip">${escapeHtml(s.label)}</div>
+        <div class="summary-choice ${cls}">${text}</div>
+      </div>`;
+    }).join('');
   }
 
-  el('trip-select').addEventListener('change', renderDepartures);
+  el('back-to-edit-btn').addEventListener('click', ()=>{
+    el('summary-card').classList.add('hidden');
+    el('selection-flow').classList.remove('hidden');
+  });
+
+  el('confirm-save-btn').addEventListener('click', ()=>{
+    const trips = reservableTrips();
+    const missing = trips.filter(s => !tentativeSelections[s.id]);
+    if(missing.length > 0){
+      el('summary-card').classList.add('hidden');
+      el('missing-confirm-card').classList.remove('hidden');
+      el('missing-trip-list').innerHTML = missing.map(s=>`<div class="missing-trip-item">${escapeHtml(s.label)}</div>`).join('');
+      return;
+    }
+    doSave();
+  });
+
+  el('missing-confirm-back-btn').addEventListener('click', ()=>{
+    el('missing-confirm-card').classList.add('hidden');
+    el('selection-flow').classList.remove('hidden');
+  });
+
+  el('missing-confirm-yes-btn').addEventListener('click', ()=>{
+    const trips = reservableTrips();
+    trips.forEach(s=>{
+      if(!tentativeSelections[s.id]) tentativeSelections[s.id] = SKIP;
+    });
+    doSave();
+  });
+
+  async function doSave(){
+    if(!isConfigured || !selectedPersonId) return;
+    const trips = reservableTrips();
+    // Final capacity re-check against latest local data before writing —
+    // narrows the race window without needing a full transaction for this scale of event.
+    for(const s of trips){
+      const val = tentativeSelections[s.id];
+      if(!val || val === SKIP) continue;
+      const cfg = shuttleSchedule[closedKey(s.id, val)];
+      const count = Object.entries(reservations).filter(([k,v]) => k.startsWith(s.id+'::') && v===val).length;
+      if(cfg && count >= cfg.capacity){
+        showFlash(`Sorry — ${sessionLabel(s.id)}, Shuttle ${val} just filled up. Go back and pick another for that trip.`, 'warn');
+        el('missing-confirm-card').classList.add('hidden');
+        el('selection-flow').classList.remove('hidden');
+        return;
+      }
+    }
+    const updates = { ['reservationSubmitted.' + selectedPersonId]: true };
+    trips.forEach(s=>{
+      updates['reservations.' + checkinKey(s.id, selectedPersonId)] = tentativeSelections[s.id];
+    });
+    try{
+      await eventDocRef.update(updates);
+      localStorage.setItem('shuttle_reservation_person_id', selectedPersonId);
+      showFlash('All set — your reservations are saved.', 'ok');
+    }catch(e){
+      console.error('Save failed', e);
+      showFlash('Something went wrong saving your reservations. Try again.', 'warn');
+    }
+  }
 
   function onRemoteUpdate(data){
     roster = (data && data.roster) || [];
     shuttleSchedule = (data && data.shuttleSchedule) || {};
     reservations = (data && data.reservations) || {};
+    reservationSubmitted = (data && data.reservationSubmitted) || {};
     dataLoaded = true;
     restoreIdentityFromStorage();
-    populateTripSelect();
-    renderDepartures();
+    renderMainFlow();
   }
 
   if(isConfigured){

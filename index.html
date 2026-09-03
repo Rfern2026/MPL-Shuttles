@@ -292,7 +292,7 @@ Alex Kim
 
       <div class="card" id="roster-preview-card" style="display:none;">
         <h2>2 · Passenger List</h2>
-        <p class="muted" style="margin-top:-6px;">Everyone below gets one QR boarding pass, usable on any shuttle by default — first come, first served. Optionally lock someone to a specific shuttle bus using the dropdown; drivers will see a mismatch warning if they board that person on the wrong one. The phone field is the last 4 digits used to verify identity on the reservation page.</p>
+        <p class="muted" style="margin-top:-6px;">Everyone below gets one QR boarding pass. Which shuttle someone boards is handled entirely through the Reservations tab now — passengers pick it themselves on the reservation page. The phone field is optional contact info, not currently used for verification.</p>
         <div id="roster-table"></div>
       </div>
 
@@ -633,8 +633,6 @@ Alex Kim
     if(roster.length === 0){ el('roster-preview-card').style.display = 'none'; return; }
     el('roster-preview-card').style.display = 'block';
     const tripsBoarded = r => SESSIONS.filter(s => checkins[checkinKey(s.id, r.id)]).length;
-    const letters = shuttleLetters(getShuttleCount());
-    const shuttleOptions = '<option value="">Any shuttle</option>' + letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
     let html = '<div>';
     roster.forEach(r=>{
       const n = tripsBoarded(r);
@@ -644,7 +642,6 @@ Alex Kim
           <div class="attendee-meta">${r.id} · ${n > 0 ? n + ' of ' + SESSIONS.length + ' trips boarded' : 'not boarded yet'}</div>
         </div>
         <input type="text" data-id="${r.id}" class="phone-edit" value="${escapeHtml(r.phone || '')}" placeholder="Last 4" maxlength="4" inputmode="numeric" style="margin-bottom:0; width:70px;">
-        <select data-id="${r.id}" class="assign-select" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
         <button class="btn danger passenger-remove-btn" data-id="${r.id}" style="margin-left:8px;">Remove</button>
       </div>`;
     });
@@ -654,14 +651,6 @@ Alex Kim
       input.addEventListener('change', async ()=>{
         const r = roster.find(x=>x.id === input.dataset.id);
         if(r){ r.phone = input.value.replace(/\D/g, '').slice(-4); input.value = r.phone; await saveRoster(); }
-      });
-    });
-    document.querySelectorAll('.assign-select').forEach(sel=>{
-      const r = roster.find(x=>x.id === sel.dataset.id);
-      if(r && r.assignedShuttle) sel.value = r.assignedShuttle;
-      sel.addEventListener('change', async ()=>{
-        const rr = roster.find(x=>x.id === sel.dataset.id);
-        if(rr){ rr.assignedShuttle = sel.value || null; await saveRoster(); }
       });
     });
     document.querySelectorAll('.passenger-remove-btn').forEach(btn=>{
@@ -820,7 +809,7 @@ Alex Kim
       body.innerHTML = '<div class="card"><p class="muted">No shuttle schedule configured for this trip yet — set departure times and capacity in the Setup tab to open reservations for it.</p></div>';
       return;
     }
-    const shuttleOptions = configuredLetters.map(l=>{
+    const shuttleOptions = '<option value="none">No shuttle needed</option>' + configuredLetters.map(l=>{
       const cfg = shuttleSchedule[closedKey(session, l)];
       return `<option value="${l}">Shuttle ${l} · ${escapeHtml(cfg.time)}</option>`;
     }).join('');
@@ -847,10 +836,18 @@ Alex Kim
       <div class="card"><h2>Who reserved what</h2><div id="reservations-list"></div></div>`;
     body.innerHTML = html;
 
+    function reservationLabel(shuttle){
+      if(shuttle === 'none') return 'No shuttle needed';
+      return 'currently Shuttle ' + shuttle;
+    }
+
     const passengerSel = el('reservation-admin-passenger');
     passengerSel.innerHTML = '<option value="">— Select Passenger —</option>' +
       roster.slice().sort((a,b)=>a.name.localeCompare(b.name))
-        .map(r=>`<option value="${r.id}">${escapeHtml(r.name)}${reservations[checkinKey(session,r.id)] ? ' (currently Shuttle ' + reservations[checkinKey(session,r.id)] + ')' : ''}</option>`).join('');
+        .map(r=>{
+          const existing = reservations[checkinKey(session,r.id)];
+          return `<option value="${r.id}">${escapeHtml(r.name)}${existing ? ' (' + reservationLabel(existing) + ')' : ''}</option>`;
+        }).join('');
     passengerSel.addEventListener('change', ()=>{
       const pid = passengerSel.value;
       const existing = pid ? reservations[checkinKey(session, pid)] : null;
@@ -875,13 +872,13 @@ Alex Kim
     const rows = entries.map(([key, shuttle])=>{
       const personId = key.split('::')[1];
       const person = roster.find(r=>r.id===personId);
-      const cfg = shuttleSchedule[closedKey(session, shuttle)];
+      const cfg = shuttle === 'none' ? null : shuttleSchedule[closedKey(session, shuttle)];
       return { personId, name: person ? person.name : personId, shuttle, time: cfg ? cfg.time : '' };
     }).sort((a,b)=>a.name.localeCompare(b.name));
     listEl.innerHTML = rows.map(r=>`<div class="attendee-row">
       <div>
         <div class="attendee-name">${escapeHtml(r.name)}</div>
-        <div class="attendee-meta">Shuttle ${r.shuttle}${r.time ? ' · ' + escapeHtml(r.time) : ''}</div>
+        <div class="attendee-meta">${r.shuttle === 'none' ? 'No shuttle needed' : 'Shuttle ' + r.shuttle + (r.time ? ' · ' + escapeHtml(r.time) : '')}</div>
       </div>
       <select class="reservation-reassign-select" data-key="${session}::${r.personId}" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
       <button class="btn danger reservation-clear-btn" data-key="${session}::${r.personId}" style="margin-left:8px;">Clear</button>
@@ -1120,7 +1117,8 @@ Alex Kim
       let meta = done ? 'Boarded Shuttle ' + checkins[key].shuttle + ' · ' + new Date(checkins[key].time).toLocaleTimeString() : 'Not boarded this trip';
       if(mismatch) meta += ' · <span style="color:var(--red);">Assigned to Shuttle ' + r.assignedShuttle + '</span>';
       const reservedShuttle = reservations[checkinKey(session, r.id)];
-      if(reservedShuttle && !done) meta += ' · <span style="color:var(--teal);">Reserved Shuttle ' + reservedShuttle + '</span>';
+      if(reservedShuttle && reservedShuttle !== 'none' && !done) meta += ' · <span style="color:var(--teal);">Reserved Shuttle ' + reservedShuttle + '</span>';
+      if(reservedShuttle === 'none' && !done) meta += ' · <span style="color:var(--ink-soft);">No shuttle reserved</span>';
       return `<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>

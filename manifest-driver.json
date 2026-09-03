@@ -1,0 +1,13 @@
+{
+  "name": "MP&L Driver Check-In",
+  "short_name": "MP&L Driver",
+  "start_url": "./driver-checkin.html",
+  "display": "standalone",
+  "background_color": "#0F1C33",
+  "theme_color": "#0F1C33",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

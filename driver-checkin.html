@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MP&L Driver Check-In</title>
+
+<link rel="manifest" href="manifest-driver.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#0F1C33">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MP&L Driver">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --navy:#0F1C33;
+    --navy-panel:#182A4A;
+    --navy-panel-2:#20365E;
+    --amber:#FFB020;
+    --teal:#3FD9C0;
+    --red:#FF6B6B;
+    --paper:#EAEFF2;
+    --ink:#0F1C33;
+    --ink-soft:#4A5A78;
+    --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body, .board-root{
+    font-family: var(--sans);
+    background: var(--navy);
+    color: var(--paper);
+    margin:0;
+    min-height:100%;
+  }
+  .board-root{ padding: 0; }
+
+  .header{
+    background: linear-gradient(180deg, var(--navy-panel) 0%, var(--navy) 100%);
+    padding: 20px 20px 0 20px;
+    border-bottom: 2px solid var(--navy-panel-2);
+  }
+  .header-top{
+    display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  }
+  .eyebrow{
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--amber);
+    text-transform: uppercase;
+    margin: 0 0 4px 0;
+  }
+  h1{
+    font-size: 22px;
+    margin: 0 0 14px 0;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .tabs{
+    display:flex; gap: 4px; overflow-x:auto;
+  }
+  .tab{
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--ink-soft);
+    border: none;
+    padding: 10px 16px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+  }
+  .tab.active{
+    color: var(--amber);
+    border-bottom: 2px solid var(--amber);
+  }
+  .tab:hover:not(.active){ color: var(--paper); }
+
+  .panel{ padding: 20px; max-width: 900px; margin: 0 auto; }
+  .hidden{ display:none !important; }
+
+  .card{
+    background: var(--navy-panel);
+    border: 1px solid var(--navy-panel-2);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card h2{
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--amber);
+    margin: 0 0 12px 0;
+    font-family: var(--mono);
+  }
+  label{
+    display:block; font-size: 12px; color: var(--ink-soft); margin-bottom: 6px; font-family: var(--mono); letter-spacing: 0.04em;
+  }
+  textarea, input[type=text], select{
+    width: 100%;
+    background: var(--navy);
+    border: 1px solid var(--navy-panel-2);
+    color: var(--paper);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: var(--sans);
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
+  textarea{ min-height: 140px; resize: vertical; font-family: var(--mono); }
+  input[type=number]{
+    background: var(--navy); border: 1px solid var(--navy-panel-2); color: var(--paper);
+    border-radius: 6px; padding: 8px 10px; width: 80px; font-family: var(--mono);
+  }
+  .row{ display:flex; gap: 14px; align-items:flex-end; flex-wrap: wrap; }
+  .btn{
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: var(--amber);
+    color: var(--navy);
+    border: none;
+    border-radius: 6px;
+    padding: 11px 18px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  .btn:hover{ filter: brightness(1.08); }
+  .btn.secondary{
+    background: transparent;
+    color: var(--paper);
+    border: 1px solid var(--navy-panel-2);
+  }
+  .btn.danger{ background: var(--red); color: var(--navy); }
+  .btn:disabled{ opacity: 0.4; cursor: not-allowed; }
+
+  .muted{ color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+
+  /* Boarding pass grid */
+  .pass-grid{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .pass{
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  }
+  .pass-top{ padding: 14px 14px 10px 14px; border-bottom: 1px dashed #9AA7BD; position: relative; }
+  .pass-top::before, .pass-top::after{
+    content:''; position:absolute; bottom:-8px; width:16px; height:16px; background: var(--navy);
+    border-radius: 50%;
+  }
+  .pass-top::before{ left:-8px; }
+  .pass-top::after{ right:-8px; }
+  .pass-eyebrow{ font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; color: var(--ink-soft); text-transform: uppercase; }
+  .pass-name{ font-size: 17px; font-weight: 700; margin: 2px 0 0 0; }
+  .pass-shuttle{
+    display:inline-block; margin-top: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+    background: var(--navy); color: var(--amber); padding: 3px 8px; border-radius: 4px;
+  }
+  .pass-bottom{ padding: 14px; display:flex; flex-direction:column; align-items:center; gap: 6px; }
+  .pass-bottom .qr{ background:white; padding:6px; border-radius:6px; }
+  .pass-code{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-soft); }
+
+  /* Check-in */
+  .scan-box{ background: var(--navy); border: 1px solid var(--navy-panel-2); border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+  #reader{ width: 100%; max-width: 360px; margin: 0 auto; }
+  .flash{
+    padding: 12px 14px; border-radius: 8px; font-family: var(--mono); font-size: 13px; margin-bottom: 14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .flash.ok{ background: rgba(63,217,192,0.15); color: var(--teal); border:1px solid var(--teal); }
+  .flash.warn{ background: rgba(255,107,107,0.15); color: var(--red); border:1px solid var(--red); }
+
+  .attendee-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 10px 12px; border-bottom: 1px solid var(--navy-panel-2);
+  }
+  .attendee-row:last-child{ border-bottom: none; }
+  .attendee-name{ font-size: 14px; }
+  .attendee-meta{ font-family: var(--mono); font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .check-btn{
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    border-radius: 6px; padding: 7px 12px; cursor: pointer; border: none;
+  }
+  .check-btn.pending{ background: var(--navy-panel-2); color: var(--paper); }
+  .check-btn.done{ background: var(--teal); color: var(--navy); }
+
+  /* Dashboard */
+  .flip-grid{
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 14px; margin-bottom: 20px;
+  }
+  .flip-card{
+    background: var(--navy-panel); border: 1px solid var(--navy-panel-2); border-radius: 10px; padding: 16px; text-align:center;
+  }
+  .flip-label{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--ink-soft); text-transform: uppercase; }
+  .flip-value{ font-family: var(--mono); font-size: 34px; color: var(--amber); font-weight: 700; margin-top: 6px; letter-spacing: 0.02em; }
+  .flip-value.total{ color: var(--teal); }
+  .missing-list .attendee-name{ color: var(--red); }
+
+  #config-banner{
+    background: var(--red); color: var(--navy); font-family: var(--mono); font-size: 12px;
+    padding: 10px 20px; text-align: center; font-weight: 700;
+  }
+  #config-banner a{ color: var(--navy); }
+
+  /* Trip-complete review modal */
+  .modal-overlay{
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display:flex; align-items:center; justify-content:center; z-index: 1000; padding: 20px;
+  }
+  .modal-card{
+    background: var(--navy-panel); border: 1px solid var(--navy-panel-2); border-radius: 12px;
+    max-width: 480px; width: 100%; max-height: 85vh; display:flex; flex-direction:column;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .modal-header{ padding: 20px 20px 12px 20px; border-bottom: 1px solid var(--navy-panel-2); }
+  .modal-header .eyebrow{ margin-bottom: 6px; }
+  .modal-header h3{ margin:0; font-size: 18px; }
+  .modal-body{ padding: 16px 20px; overflow-y: auto; }
+  .modal-footer{ padding: 14px 20px; border-top: 1px solid var(--navy-panel-2); text-align:right; }
+
+  @media print{
+    body *{ visibility: hidden; }
+    .print-target, .print-target *{ visibility: visible; }
+    .print-target{ position: absolute; left:0; top:0; width:100%; background: white !important; color: black !important; }
+    .print-target .attendee-name, .print-target h2, .print-target h3{ color: black !important; }
+    .pass{ break-inside: avoid; }
+  }
+  @media screen{
+    #reservations-print-area{ display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="board-root">
+  <div id="config-banner" class="hidden">⚠ Firebase isn't configured yet — open this file and paste your firebaseConfig near the top of the script. Nothing will save until that's done.</div>
+  <div class="header">
+    <div class="header-top">
+      <div>
+        <p class="eyebrow">MP&L Driver Check-In</p>
+        <h1 id="event-title">MP&L Shuttles</h1>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="checkin">Check-In</button>
+      <button class="tab" data-tab="dashboard">Dashboard</button>
+    </div>
+  </div>
+
+  <div class="panel">
+
+    <!-- Hidden: shuttle count is configured in the full admin app; kept here so shared logic keeps working. -->
+    <input type="number" id="shuttle-count" value="3" class="hidden">
+
+    <!-- CHECKIN TAB -->
+    <div id="tab-checkin" class="tab-content">
+      <div class="card">
+        <h2>This Driver is boarding</h2>
+        <p class="muted" style="margin-top:-6px;">Pick your name to auto-fill your assigned shuttle, then set the trip. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all trips.</p>
+        <div class="row">
+          <select id="checkin-driver-active" style="margin-bottom:0; width:auto;"><option value="">— Select Driver —</option></select>
+        </div>
+        <div class="row">
+          <select id="checkin-session-active" style="margin-bottom:0; width:auto;"></select>
+          <select id="checkin-shuttle-active" style="margin-bottom:0; width:auto;"></select>
+          <button class="btn" id="toggle-scan-btn">Start Camera Scan</button>
+        </div>
+        <div class="scan-box hidden" id="scan-box">
+          <div id="reader"></div>
+          <button class="btn" id="scan-next-btn" style="display:none; width:100%; margin-top:10px;">Scan Next Passenger</button>
+          <p class="muted" style="text-align:center;">Point a boarding pass QR at the camera. If the camera doesn't work in this preview, use the tap-to-check-in list below instead.</p>
+        </div>
+        <div id="live-counter" class="flip-card" style="margin-bottom:14px; text-align:left; padding:12px 16px;"></div>
+        <div id="flash-area"></div>
+        <div class="row" style="margin-top:4px;">
+          <button class="btn secondary" id="undo-last-btn">Undo Last Scan</button>
+          <button class="btn danger" id="close-my-shuttle-btn">Close My Shuttle for This Trip</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Tap to check in</h2>
+        <p class="muted" style="margin-top:-6px;">Shows everyone not yet boarded on this trip. Tapping Check In logs them onto the trip and shuttle selected above.</p>
+        <input type="text" id="checkin-search" placeholder="Search by name...">
+        <label style="display:flex; align-items:center; gap:8px; font-family:var(--sans); font-size:13px; color:var(--paper); cursor:pointer;">
+          <input type="checkbox" id="show-boarded-toggle" style="width:auto; margin:0;"> Show already-boarded too
+        </label>
+        <div id="checkin-list"></div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD TAB -->
+    <div id="tab-dashboard" class="tab-content hidden">
+      <div class="card">
+        <h2>Viewing trip</h2>
+        <div class="row">
+          <select id="dashboard-session-select" style="margin-bottom:0; width:auto;"></select>
+          <button class="btn secondary" id="toggle-close-trip-btn"></button>
+        </div>
+        <p class="muted" id="trip-status-note" style="margin-top:8px;"></p>
+      </div>
+      <div class="flip-grid" id="flip-grid"></div>
+      <div class="card">
+        <h2>Not yet boarded on this trip</h2>
+        <div id="missing-list" class="missing-list"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="trip-review-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <p class="eyebrow">Trip Complete</p>
+      <h3 id="trip-review-title">All shuttles closed</h3>
+    </div>
+    <div class="modal-body" id="trip-review-body"></div>
+    <div class="modal-footer">
+      <button class="btn" id="trip-review-close-btn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  let roster = [];      // [{id, name}]
+  let checkins = {};    // {"sessionId::personId": {time, shuttle}}
+  let logs = [];         // [{logId, personId, name, sessionId, shuttle, time, action, method}]
+  let closedSessions = {}; // {sessionId::shuttle: true} — shuttle+trip combos marked done
+  let drivers = [];        // [{id, name, shuttle}]
+  let shuttleSchedule = {}; // {sessionId::shuttle: {time, capacity}} — departure config for reservations
+  let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
+  let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
+  let html5QrCode = null;
+  let scanning = false;
+  let dataLoaded = false;
+
+  const SESSIONS = [
+    { id: 'd1-am', label: 'Day 1 · Morning' },
+    { id: 'd1-pm', label: 'Day 1 · Afternoon' },
+    { id: 'd1-eve-hub', label: 'Day 1 · Evening to HUB Stadium' },
+    { id: 'd1-eve-hotel', label: 'Day 1 · Evening to Hotel' },
+    { id: 'd2-am', label: 'Day 2 · Morning' },
+    { id: 'd2-pm', label: 'Day 2 · Afternoon' },
+    { id: 'd2-eve-dinner', label: 'Day 2 · Evening to Dinner' },
+    { id: 'd2-eve-hotel', label: 'Day 2 · Evening to Hotel' }
+  ];
+  const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
+  const closedKey = (sessionId, shuttle) => sessionId + '::' + shuttle;
+  const isShuttleClosed = (sessionId, shuttle) => !!closedSessions[closedKey(sessionId, shuttle)];
+  const isTripFullyClosed = (sessionId) => shuttleLettersGlobal().every(l => isShuttleClosed(sessionId, l));
+  function shuttleLettersGlobal(){ return shuttleLetters(getShuttleCount()); }
+
+  const el = id => document.getElementById(id);
+
+  // ============================================================
+  // FIREBASE SETUP — do this once before sharing the file:
+  // 1. Go to https://console.firebase.google.com → Add project (free, no credit card)
+  // 2. In the project: Build → Firestore Database → Create database → Start in test mode
+  // 3. Click the gear icon → Project settings → scroll to "Your apps" → click the </> (web) icon → register an app (nickname doesn't matter)
+  // 4. It will show you a firebaseConfig object — copy it and paste it below, replacing this placeholder
+  // 5. Test mode rules expire after 30 days. Before then, go to Firestore → Rules and set:
+  //      allow read, write: if true;
+  //    for the shuttleEvents collection (fine for a short event; nothing sensitive is stored beyond names).
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyAguMsCqZUv7uR7ynEmkF4-9Br8q4i2b6Q",
+    authDomain: "conference-shuttle-check-in.firebaseapp.com",
+    projectId: "conference-shuttle-check-in",
+    storageBucket: "conference-shuttle-check-in.firebasestorage.app",
+    messagingSenderId: "776056185305",
+    appId: "1:776056185305:web:0c66173debf886a5a3f9c8"
+  };
+
+  const isConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('PASTE_');
+  let eventDocRef = null;
+  if(isConfigured){
+    firebase.initializeApp(firebaseConfig);
+    eventDocRef = firebase.firestore().collection('shuttleEvents').doc('current-event');
+  } else {
+    document.getElementById('config-banner').classList.remove('hidden');
+  }
+
+  function genId(){
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for(let i=0;i<6;i++) code += chars[Math.floor(Math.random()*chars.length)];
+    return code;
+  }
+
+  function shuttleLetters(n){
+    const out = [];
+    for(let i=0;i<n;i++) out.push(String.fromCharCode(65+i));
+    return out;
+  }
+
+  function getShuttleCount(){
+    return Math.max(1, parseInt(el('shuttle-count').value || '3', 10));
+  }
+
+  async function saveRoster(){
+    if(!isConfigured) return;
+    try{ await eventDocRef.set({ roster }, { merge: true }); }
+    catch(e){ console.error('Failed to save roster', e); }
+  }
+
+  async function saveCheckins(){
+    if(!isConfigured) return;
+    try{ await eventDocRef.set({ checkins }, { merge: true }); }
+    catch(e){ console.error('Failed to save checkins', e); }
+  }
+
+  async function saveClosedSessions(){
+    if(!isConfigured) return;
+    try{ await eventDocRef.set({ closedSessions }, { merge: true }); }
+    catch(e){ console.error('Failed to save closed sessions', e); }
+  }
+
+  async function saveDrivers(){
+    if(!isConfigured) return;
+    try{ await eventDocRef.set({ drivers }, { merge: true }); }
+    catch(e){ console.error('Failed to save drivers', e); }
+  }
+
+  async function saveShuttleSchedule(){
+    if(!isConfigured) return;
+    try{ await eventDocRef.set({ shuttleSchedule }, { merge: true }); }
+    catch(e){ console.error('Failed to save shuttle schedule', e); }
+  }
+
+  async function clearReservation(key){
+    if(!isConfigured) return;
+    try{ await eventDocRef.update({ ['reservations.' + key]: firebase.firestore.FieldValue.delete() }); }
+    catch(e){ console.error('Failed to clear reservation', e); }
+  }
+
+  async function setReservation(key, shuttle){
+    if(!isConfigured) return;
+    try{ await eventDocRef.update({ ['reservations.' + key]: shuttle }); }
+    catch(e){ console.error('Failed to update reservation', e); }
+  }
+
+  async function resetPassengerReservations(personId){
+    if(!isConfigured) return;
+    const updates = { ['reservationSubmitted.' + personId]: firebase.firestore.FieldValue.delete() };
+    SESSIONS.forEach(s=>{
+      updates['reservations.' + checkinKey(s.id, personId)] = firebase.firestore.FieldValue.delete();
+    });
+    try{ await eventDocRef.update(updates); }
+    catch(e){ console.error('Failed to reset passenger reservations', e); }
+  }
+
+  async function appendLog(entry){
+    if(!isConfigured) return;
+    try{
+      await eventDocRef.set({ logs: firebase.firestore.FieldValue.arrayUnion(entry) }, { merge: true });
+    }catch(e){ console.error('Failed to save log entry', e); }
+  }
+
+  function onRemoteUpdate(data){
+    roster = (data && data.roster) || [];
+    checkins = (data && data.checkins) || {};
+    logs = (data && data.logs) || [];
+    closedSessions = (data && data.closedSessions) || {};
+    drivers = (data && data.drivers) || [];
+    shuttleSchedule = (data && data.shuttleSchedule) || {};
+    reservations = (data && data.reservations) || {};
+    reservationSubmitted = (data && data.reservationSubmitted) || {};
+    dataLoaded = true;
+    const activeTab = document.querySelector('.tab.active').dataset.tab;
+    if(activeTab === 'checkin'){ populateSessionSelects(); populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }
+    if(activeTab === 'dashboard') renderDashboard();
+  }
+
+  // ---- Tabs ----
+  document.querySelectorAll('.tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c=>c.classList.add('hidden'));
+      btn.classList.add('active');
+      el('tab-'+btn.dataset.tab).classList.remove('hidden');
+      if(btn.dataset.tab === 'checkin'){ renderCheckin(); renderLiveCounter(); }
+      if(btn.dataset.tab === 'dashboard') renderDashboard();
+    });
+  });
+
+  // ---- Setup ----
+  function parseNameLine(line){
+    const parts = line.split(',');
+    const name = parts[0].trim();
+    const phoneRaw = parts[1] ? parts[1].replace(/\D/g, '') : '';
+    const phone = phoneRaw.slice(-4);
+    return { name, phone };
+  }
+
+  function renderRosterPreview(){
+    if(roster.length === 0){ el('roster-preview-card').style.display = 'none'; return; }
+    el('roster-preview-card').style.display = 'block';
+    const tripsBoarded = r => SESSIONS.filter(s => checkins[checkinKey(s.id, r.id)]).length;
+    let html = '<div>';
+    roster.forEach(r=>{
+      const n = tripsBoarded(r);
+      html += `<div class="attendee-row" style="flex-wrap:wrap;">
+        <div>
+          <div class="attendee-name">${escapeHtml(r.name)}</div>
+          <div class="attendee-meta">${r.id} · ${n > 0 ? n + ' of ' + SESSIONS.length + ' trips boarded' : 'not boarded yet'}</div>
+        </div>
+        <input type="text" data-id="${r.id}" class="phone-edit" value="${escapeHtml(r.phone || '')}" placeholder="Last 4" maxlength="4" inputmode="numeric" style="margin-bottom:0; width:70px;">
+        <button class="btn danger passenger-remove-btn" data-id="${r.id}" style="margin-left:8px;">Remove</button>
+      </div>`;
+    });
+    html += '</div>';
+    el('roster-table').innerHTML = html;
+    document.querySelectorAll('.phone-edit').forEach(input=>{
+      input.addEventListener('change', async ()=>{
+        const r = roster.find(x=>x.id === input.dataset.id);
+        if(r){ r.phone = input.value.replace(/\D/g, '').slice(-4); input.value = r.phone; await saveRoster(); }
+      });
+    });
+    document.querySelectorAll('.passenger-remove-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const r = roster.find(x=>x.id === btn.dataset.id);
+        if(!r) return;
+        if(!confirm(`Remove ${r.name} from the passenger list? Their boarding pass will stop working, but their past check-in history stays in the log.`)) return;
+        roster = roster.filter(x=>x.id !== btn.dataset.id);
+        await saveRoster();
+        renderRosterPreview();
+        renderPasses();
+        renderCheckinList();
+        renderLiveCounter();
+        renderDashboard();
+        el('setup-status').textContent = `${r.name} removed from the passenger list.`;
+      });
+    });
+  }
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---- Drivers ----
+  function populateDriverShuttleInput(){
+    const sel = el('driver-shuttle-input');
+    const letters = shuttleLetters(getShuttleCount());
+    const current = sel.value;
+    sel.innerHTML = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
+    if(letters.includes(current)) sel.value = current;
+  }
+
+
+
+  function renderDriversPreview(){
+    populateDriverShuttleInput();
+    const table = el('drivers-table');
+    if(drivers.length === 0){ table.innerHTML = '<p class="muted">No drivers added yet.</p>'; return; }
+    const letters = shuttleLetters(getShuttleCount());
+    const shuttleOptions = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
+    table.innerHTML = drivers.map(d=>`<div class="attendee-row">
+      <input type="text" data-id="${d.id}" class="driver-name-edit" value="${escapeHtml(d.name)}" style="margin-bottom:0; flex:1; min-width:120px;">
+      <select data-id="${d.id}" class="driver-shuttle-edit" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
+      <button class="btn danger driver-remove-btn" data-id="${d.id}" style="margin-left:8px;">Remove</button>
+    </div>`).join('');
+    table.querySelectorAll('.driver-shuttle-edit').forEach(sel=>{
+      const d = drivers.find(x=>x.id===sel.dataset.id);
+      if(d) sel.value = d.shuttle;
+      sel.addEventListener('change', async ()=>{
+        const dd = drivers.find(x=>x.id===sel.dataset.id);
+        if(dd){ dd.shuttle = sel.value; await saveDrivers(); populateDriverSelect(); }
+      });
+    });
+    table.querySelectorAll('.driver-name-edit').forEach(input=>{
+      input.addEventListener('change', async ()=>{
+        const dd = drivers.find(x=>x.id===input.dataset.id);
+        if(dd && input.value.trim()){ dd.name = input.value.trim(); await saveDrivers(); populateDriverSelect(); }
+      });
+    });
+    table.querySelectorAll('.driver-remove-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        drivers = drivers.filter(x=>x.id!==btn.dataset.id);
+        await saveDrivers();
+        renderDriversPreview();
+        populateDriverSelect();
+      });
+    });
+  }
+
+  function renderShuttleScheduleTable(){
+    const table = el('shuttle-schedule-table');
+    if(!table) return;
+    const letters = shuttleLetters(getShuttleCount());
+    let html = '';
+    SESSIONS.forEach(s=>{
+      html += `<div class="attendee-row" style="flex-wrap:wrap;">
+        <div style="flex-basis:100%; margin-bottom:6px;"><strong style="font-size:13px;">${s.label}</strong></div>`;
+      letters.forEach(l=>{
+        const key = closedKey(s.id, l);
+        const cfg = shuttleSchedule[key] || { time: '', capacity: 14 };
+        html += `
+        <div style="display:flex; align-items:center; gap:8px; flex-basis:100%; margin-bottom:6px;">
+          <span class="attendee-meta" style="width:70px;">Shuttle ${l}</span>
+          <input type="text" class="sched-time-input" data-key="${key}" placeholder="e.g. 7:00 AM" value="${escapeHtml(cfg.time || '')}" style="margin-bottom:0; width:120px;">
+          <input type="number" class="sched-capacity-input" data-key="${key}" min="0" value="${cfg.capacity != null ? cfg.capacity : 14}" style="margin-bottom:0; width:70px;">
+          <span class="attendee-meta">seats</span>
+        </div>`;
+      });
+      html += `</div>`;
+    });
+    table.innerHTML = html;
+    table.querySelectorAll('.sched-time-input, .sched-capacity-input').forEach(input=>{
+      input.addEventListener('change', async ()=>{
+        const key = input.dataset.key;
+        const timeInput = table.querySelector(`.sched-time-input[data-key="${key}"]`);
+        const capInput = table.querySelector(`.sched-capacity-input[data-key="${key}"]`);
+        const time = timeInput.value.trim();
+        const capacity = parseInt(capInput.value, 10);
+        if(!time){
+          delete shuttleSchedule[key];
+        } else {
+          shuttleSchedule[key] = { time, capacity: isNaN(capacity) ? 14 : capacity };
+        }
+        await saveShuttleSchedule();
+      });
+    });
+  }
+
+  // ---- Reservations (organizer view) ----
+  function renderReservationsTab(){
+    const sel = el('reservations-session-select');
+    if(sel.options.length === 0){
+      sel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+      sel.onchange = renderReservationsTab;
+    }
+    const session = sel.value || SESSIONS[0].id;
+    const letters = shuttleLetters(getShuttleCount());
+    const body = el('reservations-body');
+    if(!dataLoaded){ body.innerHTML = '<p class="muted">Loading…</p>'; return; }
+
+    // Reset-a-passenger control: independent of which trip is currently selected above.
+    const resetSel = el('reset-passenger-select');
+    resetSel.innerHTML = '<option value="">— Select Passenger —</option>' +
+      roster.slice().sort((a,b)=>a.name.localeCompare(b.name))
+        .map(r=>`<option value="${r.id}">${escapeHtml(r.name)}${reservationSubmitted[r.id] ? ' (submitted)' : ''}</option>`).join('');
+    el('reset-passenger-btn').onclick = async ()=>{
+      const pid = resetSel.value;
+      if(!pid) return;
+      const person = roster.find(r=>r.id===pid);
+      if(!confirm(`Reset ${person ? person.name : 'this passenger'}? This clears every trip they picked or skipped, and lets them go through the whole reservation flow again from scratch.`)) return;
+      delete reservationSubmitted[pid];
+      SESSIONS.forEach(s=>{ delete reservations[checkinKey(s.id, pid)]; });
+      await resetPassengerReservations(pid);
+      renderReservationsTab();
+    };
+
+    el('print-manifest-btn').onclick = ()=>{
+      const tripLetters = letters.filter(l => shuttleSchedule[closedKey(session, l)]);
+      if(tripLetters.length === 0){
+        alert('No shuttle schedule is configured for this trip yet, so there\'s nothing to print.');
+        return;
+      }
+      let printHtml = `<h2 style="margin-bottom:4px;">${escapeHtml(sessionLabel(session))}</h2>
+        <p style="font-family:var(--mono); font-size:12px; color:#555; margin-top:0; margin-bottom:20px;">Printed ${new Date().toLocaleString()}</p>`;
+      tripLetters.forEach(l=>{
+        const cfg = shuttleSchedule[closedKey(session, l)];
+        const names = roster.filter(r => reservations[checkinKey(session, r.id)] === l)
+          .map(r=>r.name).sort((a,b)=>a.localeCompare(b));
+        printHtml += `<h3 style="margin:18px 0 6px 0; border-bottom:2px solid #000; padding-bottom:4px;">Shuttle ${l} — ${escapeHtml(cfg.time)} (${names.length} / ${cfg.capacity})</h3>`;
+        if(names.length === 0){
+          printHtml += '<p style="color:#777;">No reservations yet.</p>';
+        } else {
+          printHtml += '<ol style="margin:0; padding-left:20px;">' + names.map(n=>`<li style="padding:3px 0;">${escapeHtml(n)}</li>`).join('') + '</ol>';
+        }
+      });
+      el('reservations-print-area').innerHTML = printHtml;
+      window.print();
+    };
+
+    const configuredLetters = letters.filter(l => shuttleSchedule[closedKey(session, l)]);
+    if(configuredLetters.length === 0){
+      body.innerHTML = '<div class="card"><p class="muted">No shuttle schedule configured for this trip yet — set departure times and capacity in the Setup tab to open reservations for it.</p></div>';
+      return;
+    }
+    const shuttleOptions = '<option value="none">No shuttle needed</option>' + configuredLetters.map(l=>{
+      const cfg = shuttleSchedule[closedKey(session, l)];
+      return `<option value="${l}">Shuttle ${l} · ${escapeHtml(cfg.time)}</option>`;
+    }).join('');
+
+    let html = '<div class="flip-grid">';
+    configuredLetters.forEach(l=>{
+      const cfg = shuttleSchedule[closedKey(session, l)];
+      const count = Object.entries(reservations).filter(([k,v]) => k.startsWith(session+'::') && v===l).length;
+      html += `<div class="flip-card">
+        <div class="flip-label">Shuttle ${l} · ${escapeHtml(cfg.time)}</div>
+        <div class="flip-value">${count}<span style="font-size:16px;color:var(--ink-soft);"> / ${cfg.capacity}</span></div>
+      </div>`;
+    });
+    html += `</div>
+      <div class="card">
+        <h2>Add or change a reservation</h2>
+        <p class="muted" style="margin-top:-6px;">As admin you can assign, revise, or reactivate anyone\u2019s reservation directly — capacity is shown as a guide but not enforced for you.</p>
+        <div class="row">
+          <select id="reservation-admin-passenger" style="margin-bottom:0; flex:1; min-width:160px;"></select>
+          <select id="reservation-admin-shuttle" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
+          <button class="btn" id="reservation-admin-save-btn">Save</button>
+        </div>
+      </div>
+      <div class="card"><h2>Who reserved what</h2><div id="reservations-list"></div></div>`;
+    body.innerHTML = html;
+
+    function reservationLabel(shuttle){
+      if(shuttle === 'none') return 'No shuttle needed';
+      return 'currently Shuttle ' + shuttle;
+    }
+
+    const passengerSel = el('reservation-admin-passenger');
+    passengerSel.innerHTML = '<option value="">— Select Passenger —</option>' +
+      roster.slice().sort((a,b)=>a.name.localeCompare(b.name))
+        .map(r=>{
+          const existing = reservations[checkinKey(session,r.id)];
+          return `<option value="${r.id}">${escapeHtml(r.name)}${existing ? ' (' + reservationLabel(existing) + ')' : ''}</option>`;
+        }).join('');
+    passengerSel.addEventListener('change', ()=>{
+      const pid = passengerSel.value;
+      const existing = pid ? reservations[checkinKey(session, pid)] : null;
+      if(existing) el('reservation-admin-shuttle').value = existing;
+    });
+    el('reservation-admin-save-btn').addEventListener('click', async ()=>{
+      const pid = passengerSel.value;
+      const shuttle = el('reservation-admin-shuttle').value;
+      if(!pid) return;
+      const key = checkinKey(session, pid);
+      reservations[key] = shuttle;
+      await setReservation(key, shuttle);
+      renderReservationsTab();
+    });
+
+    const listEl = el('reservations-list');
+    const entries = Object.entries(reservations).filter(([k]) => k.startsWith(session+'::'));
+    if(entries.length === 0){
+      listEl.innerHTML = '<p class="muted">No reservations yet for this trip.</p>';
+      return;
+    }
+    const rows = entries.map(([key, shuttle])=>{
+      const personId = key.split('::')[1];
+      const person = roster.find(r=>r.id===personId);
+      const cfg = shuttle === 'none' ? null : shuttleSchedule[closedKey(session, shuttle)];
+      return { personId, name: person ? person.name : personId, shuttle, time: cfg ? cfg.time : '' };
+    }).sort((a,b)=>a.name.localeCompare(b.name));
+    listEl.innerHTML = rows.map(r=>`<div class="attendee-row">
+      <div>
+        <div class="attendee-name">${escapeHtml(r.name)}</div>
+        <div class="attendee-meta">${r.shuttle === 'none' ? 'No shuttle needed' : 'Shuttle ' + r.shuttle + (r.time ? ' · ' + escapeHtml(r.time) : '')}</div>
+      </div>
+      <select class="reservation-reassign-select" data-key="${session}::${r.personId}" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
+      <button class="btn danger reservation-clear-btn" data-key="${session}::${r.personId}" style="margin-left:8px;">Clear</button>
+    </div>`).join('');
+    listEl.querySelectorAll('.reservation-reassign-select').forEach(sel=>{
+      sel.value = reservations[sel.dataset.key];
+      sel.addEventListener('change', async ()=>{
+        const key = sel.dataset.key;
+        reservations[key] = sel.value;
+        await setReservation(key, sel.value);
+        renderReservationsTab();
+      });
+    });
+    listEl.querySelectorAll('.reservation-clear-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const key = btn.dataset.key;
+        delete reservations[key];
+        await clearReservation(key);
+        renderReservationsTab();
+      });
+    });
+  }
+
+  function populateDriverSelect(){
+    const sel = el('checkin-driver-active');
+    const current = sel.value;
+    const session = activeSession();
+    const available = session ? drivers.filter(d => !isShuttleClosed(session, d.shuttle)) : drivers;
+    sel.innerHTML = '<option value="">— Select Driver —</option>' + available.map(d=>`<option value="${d.id}">${escapeHtml(d.name)} (Shuttle ${d.shuttle})</option>`).join('');
+    if(available.some(d=>d.id===current)){
+      sel.value = current;
+    } else if(current){
+      // The previously selected driver just closed out (or their shuttle closed) — clear the selection
+      // rather than silently leaving a stale value the driver would have to notice and fix themselves.
+      sel.value = '';
+    }
+  }
+
+  async function autoCheckInDriverAsPassenger(driverName, session, shuttle){
+    const match = roster.find(r => r.name.trim().toLowerCase() === driverName.trim().toLowerCase());
+    if(!match) return; // driver isn't on the passenger list — nothing to auto check-in
+    const key = checkinKey(session, match.id);
+    if(checkins[key]) return; // already checked in for this trip, nothing to do
+    checkins[key] = { time: Date.now(), shuttle };
+    lastScan = { id: match.id, name: match.name, session, shuttle };
+    appendLog({ logId: genId()+Date.now(), personId: match.id, name: match.name, sessionId: session, shuttle, time: Date.now(), action: 'checkin', method: 'driver-auto' });
+    await saveCheckins();
+    renderCheckinList();
+    renderLiveCounter();
+    showFlash(`${match.name} (driver) auto checked in — Shuttle ${shuttle}`, 'ok');
+  }
+
+  el('checkin-driver-active').addEventListener('change', async ()=>{
+    const driverId = el('checkin-driver-active').value;
+    if(!driverId) return;
+    const d = drivers.find(x=>x.id===driverId);
+    if(!d) return;
+    populateShuttleActive();
+    const shuttleSel = el('checkin-shuttle-active');
+    const optionExists = Array.from(shuttleSel.options).some(o=>o.value===d.shuttle);
+    if(optionExists){
+      shuttleSel.value = d.shuttle;
+      renderLiveCounter();
+      const session = activeSession();
+      if(session) await autoCheckInDriverAsPassenger(d.name, session, d.shuttle);
+    } else {
+      showFlash(`${d.name}'s assigned Shuttle ${d.shuttle} is closed for this trip — pick a shuttle manually.`, 'warn');
+    }
+  });
+
+  // ---- Passes ----
+  function renderPasses(){
+    const grid = el('pass-grid');
+    grid.innerHTML = '';
+    if(roster.length === 0){
+      grid.innerHTML = '<p class="muted">Build a roster in the Setup tab first.</p>';
+      return;
+    }
+    roster.forEach(r=>{
+      const domId = 'qr-' + r.id;
+      const pass = document.createElement('div');
+      pass.className = 'pass';
+      pass.innerHTML = `
+        <div class="pass-top">
+          <div class="pass-eyebrow">Boarding Pass</div>
+          <div class="pass-name">${escapeHtml(r.name)}</div>
+          <div class="pass-shuttle">Valid for all trips · first come, first served</div>
+        </div>
+        <div class="pass-bottom">
+          <div class="qr" id="${domId}"></div>
+          <div class="pass-code">${r.id}</div>
+        </div>`;
+      grid.appendChild(pass);
+      try{
+        new QRCode(document.getElementById(domId), { text: r.id, width: 120, height: 120 });
+      }catch(e){ console.error('QR render failed', e); }
+    });
+  }
+
+
+  // ---- Check-in ----
+  function populateShuttleActive(){
+    const sel = el('checkin-shuttle-active');
+    const session = activeSession();
+    const letters = shuttleLetters(getShuttleCount());
+    const openLetters = session ? letters.filter(l => !isShuttleClosed(session, l)) : letters;
+    const current = sel.value;
+    sel.innerHTML = openLetters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
+    if(openLetters.includes(current)) sel.value = current;
+  }
+
+  function populateSessionSelects(){
+    // Dashboard: always shows every trip (fully-closed ones marked), populated once.
+    const dashSel = el('dashboard-session-select');
+    if(dashSel.options.length === 0){
+      dashSel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}${isTripFullyClosed(s.id) ? ' (closed)' : ''}</option>`).join('');
+    }
+
+    // Check-in: a trip is only selectable while at least one shuttle is still open for it.
+    const checkinSel = el('checkin-session-active');
+    const openSessions = SESSIONS.filter(s => !isTripFullyClosed(s.id));
+    const prev = checkinSel.value;
+    checkinSel.innerHTML = openSessions.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+    if(openSessions.some(s=>s.id===prev)){
+      checkinSel.value = prev;
+    }
+    populateShuttleActive();
+  }
+
+  function refreshDashboardSessionLabels(){
+    const dashSel = el('dashboard-session-select');
+    Array.from(dashSel.options).forEach(opt=>{
+      const s = SESSIONS.find(x=>x.id===opt.value);
+      if(s) opt.textContent = s.label + (isTripFullyClosed(s.id) ? ' (closed)' : '');
+    });
+  }
+
+  function activeShuttle(){
+    return el('checkin-shuttle-active').value;
+  }
+
+  function activeSession(){
+    return el('checkin-session-active').value;
+  }
+
+  function renderCheckin(){
+    populateSessionSelects();
+    populateShuttleActive();
+    populateDriverSelect();
+    renderCheckinList();
+    renderLiveCounter();
+  }
+
+  el('checkin-search').addEventListener('input', renderCheckinList);
+  el('show-boarded-toggle').addEventListener('change', renderCheckinList);
+  el('checkin-session-active').addEventListener('change', async ()=>{
+    populateShuttleActive();
+    populateDriverSelect();
+    const driverId = el('checkin-driver-active').value;
+    if(driverId){
+      const d = drivers.find(x=>x.id===driverId);
+      const shuttleSel = el('checkin-shuttle-active');
+      if(d && Array.from(shuttleSel.options).some(o=>o.value===d.shuttle)){
+        shuttleSel.value = d.shuttle;
+        const session = activeSession();
+        if(session) await autoCheckInDriverAsPassenger(d.name, session, d.shuttle);
+      }
+    }
+    renderCheckinList();
+    renderLiveCounter();
+  });
+  el('checkin-shuttle-active').addEventListener('change', renderLiveCounter);
+
+  function renderLiveCounter(){
+    const box = el('live-counter');
+    if(!box) return;
+    if(!dataLoaded || roster.length === 0 || !el('checkin-session-active').value){ box.innerHTML = ''; return; }
+    const session = activeSession();
+    const shuttle = activeShuttle();
+    const onThisShuttle = roster.filter(r => { const c = checkins[checkinKey(session, r.id)]; return c && c.shuttle === shuttle; }).length;
+    const totalThisTrip = roster.filter(r => checkins[checkinKey(session, r.id)]).length;
+    box.innerHTML = `<div class="flip-label">Shuttle ${shuttle} · ${sessionLabel(session)}</div>
+      <div class="flip-value" style="font-size:26px;">${onThisShuttle}<span style="font-size:14px;color:var(--ink-soft);"> on this shuttle · ${totalThisTrip} total this trip</span></div>`;
+  }
+
+  function sessionLabel(id){
+    const s = SESSIONS.find(x=>x.id===id);
+    return s ? s.label : id;
+  }
+
+  // ---- Trip-complete review modal ----
+  function showTripReviewModal(sessionId){
+    const missing = roster.filter(r=>!checkins[checkinKey(sessionId, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
+    el('trip-review-title').textContent = sessionLabel(sessionId) + ' — all shuttles closed';
+    const body = el('trip-review-body');
+    if(missing.length === 0){
+      body.innerHTML = '<p class="muted">Everyone on the passenger list was checked in for this trip. Nothing outstanding.</p>';
+    } else {
+      body.innerHTML = `<p class="muted" style="margin-bottom:10px;">${missing.length} of ${roster.length} on the passenger list were never scanned in for this trip:</p>` +
+        missing.map(r=>`<div class="attendee-row">
+          <div>
+            <div class="attendee-name">${escapeHtml(r.name)}</div>
+            ${r.assignedShuttle ? `<div class="attendee-meta">Assigned to Shuttle ${r.assignedShuttle}</div>` : ''}
+          </div>
+        </div>`).join('');
+    }
+    el('trip-review-modal').classList.remove('hidden');
+  }
+
+  el('trip-review-close-btn').addEventListener('click', ()=>{
+    el('trip-review-modal').classList.add('hidden');
+  });
+
+  function renderCheckinList(){
+    if(!dataLoaded){
+      el('checkin-list').innerHTML = '<p class="muted">Loading passenger from the shared database — wait a moment before scanning.</p>';
+      return;
+    }
+    if(!el('checkin-session-active').value){
+      el('checkin-list').innerHTML = '<p class="muted">All trips are currently marked done. Reopen a trip from the Dashboard tab if you need to check someone in.</p>';
+      return;
+    }
+    const q = el('checkin-search').value.trim().toLowerCase();
+    const showBoarded = el('show-boarded-toggle').checked;
+    const session = activeSession();
+    let list = roster.filter(r => showBoarded || !checkins[checkinKey(session, r.id)]);
+    if(q) list = list.filter(r => r.name.toLowerCase().includes(q));
+    list = list.slice().sort((a,b)=> a.name.localeCompare(b.name));
+    const container = el('checkin-list');
+    if(list.length === 0){ container.innerHTML = '<p class="muted">Everyone matching this search has boarded this trip.</p>'; return; }
+    container.innerHTML = list.map(r=>{
+      const key = checkinKey(session, r.id);
+      const done = !!checkins[key];
+      const mismatch = r.assignedShuttle && r.assignedShuttle !== activeShuttle();
+      let meta = done ? 'Boarded Shuttle ' + checkins[key].shuttle + ' · ' + new Date(checkins[key].time).toLocaleTimeString() : 'Not boarded this trip';
+      if(mismatch) meta += ' · <span style="color:var(--red);">Assigned to Shuttle ' + r.assignedShuttle + '</span>';
+      const reservedShuttle = reservations[checkinKey(session, r.id)];
+      if(reservedShuttle && reservedShuttle !== 'none' && !done) meta += ' · <span style="color:var(--teal);">Reserved Shuttle ' + reservedShuttle + '</span>';
+      if(reservedShuttle === 'none' && !done) meta += ' · <span style="color:var(--ink-soft);">No shuttle reserved</span>';
+      return `<div class="attendee-row">
+        <div>
+          <div class="attendee-name">${escapeHtml(r.name)}</div>
+          <div class="attendee-meta">${meta}</div>
+        </div>
+        <button class="check-btn ${done?'done':'pending'}" data-id="${r.id}">${done ? 'Undo' : 'Check In'}</button>
+      </div>`;
+    }).join('');
+    container.querySelectorAll('.check-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=> toggleCheckin(btn.dataset.id, 'tap'));
+    });
+  }
+
+  let lastScan = null; // { id, name, session, shuttle }
+
+  async function toggleCheckin(id, method){
+    const session = activeSession();
+    const key = checkinKey(session, id);
+    const person = roster.find(r=>r.id===id);
+    if(checkins[key]){
+      delete checkins[key];
+      appendLog({ logId: genId()+Date.now(), personId: id, name: person ? person.name : id, sessionId: session, shuttle: activeShuttle(), time: Date.now(), action: 'undo', method: method||'tap' });
+    } else {
+      const shuttle = activeShuttle();
+      checkins[key] = { time: Date.now(), shuttle };
+      lastScan = { id, name: person ? person.name : id, session, shuttle };
+      appendLog({ logId: genId()+Date.now(), personId: id, name: person ? person.name : id, sessionId: session, shuttle, time: Date.now(), action: 'checkin', method: method||'tap' });
+    }
+    await saveCheckins();
+    renderCheckinList();
+    renderLiveCounter();
+  }
+
+  el('undo-last-btn').addEventListener('click', async ()=>{
+    if(!lastScan){ showFlash('No scan yet to undo.', 'warn'); return; }
+    const key = checkinKey(lastScan.session, lastScan.id);
+    if(checkins[key]){
+      delete checkins[key];
+      appendLog({ logId: genId()+Date.now(), personId: lastScan.id, name: lastScan.name, sessionId: lastScan.session, shuttle: lastScan.shuttle, time: Date.now(), action: 'undo', method: 'undo-last' });
+      await saveCheckins();
+      showFlash(lastScan.name + '\u2019s check-in was undone', 'warn');
+      renderCheckinList();
+      renderLiveCounter();
+      lastScan = null;
+    } else {
+      showFlash('That check-in was already removed.', 'warn');
+    }
+  });
+
+  el('close-my-shuttle-btn').addEventListener('click', async ()=>{
+    const session = activeSession();
+    const shuttle = activeShuttle();
+    if(!session || !shuttle) return;
+    if(!confirm(`Close Shuttle ${shuttle} for ${sessionLabel(session)}? You won't be able to select this shuttle for this trip again unless it's reopened from the Dashboard.`)) return;
+    const wasFullyClosed = isTripFullyClosed(session);
+    closedSessions[closedKey(session, shuttle)] = true;
+    await saveClosedSessions();
+    if(scanning){
+      try{ await html5QrCode.stop(); }catch(e){}
+      el('scan-box').classList.add('hidden');
+      el('scan-next-btn').style.display = 'none';
+      el('toggle-scan-btn').textContent = 'Start Camera Scan';
+      scanning = false;
+    }
+    populateSessionSelects();
+    populateDriverSelect();
+    renderCheckinList();
+    renderLiveCounter();
+    showFlash(`Shuttle ${shuttle} closed for ${sessionLabel(session)}.`, 'warn');
+    if(!wasFullyClosed && isTripFullyClosed(session)){
+      showTripReviewModal(session);
+    }
+  });
+
+  function showFlash(msg, type, persistent){
+    const area = el('flash-area');
+    area.innerHTML = `<div class="flash ${type}">${msg}</div>`;
+    if(!persistent){
+      setTimeout(()=>{ area.innerHTML=''; }, 3000);
+    }
+  }
+
+  // ---- Audio feedback (works on iOS Safari, unlike vibration) ----
+  let audioCtx = null;
+  function unlockAudio(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ audioCtx = null; }
+    } else if(audioCtx.state === 'suspended'){
+      audioCtx.resume();
+    }
+  }
+  function beep(freq, startOffset, durationMs, type, gainVal){
+    if(!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    const startTime = audioCtx.currentTime + startOffset;
+    gain.gain.setValueAtTime(gainVal || 0.2, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + durationMs/1000);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(startTime);
+    osc.stop(startTime + durationMs/1000);
+  }
+  // "Twinkle" — chosen success tone
+  function playSuccessTone(){
+    beep(1800, 0, 80, 'sine');
+    beep(2400, 0.08, 120, 'sine');
+  }
+  // "High Warble" — chosen warn/duplicate tone
+  function playWarnTone(){
+    beep(1800, 0, 60, 'sine', 0.15);
+    beep(2200, 0.06, 60, 'sine', 0.15);
+    beep(1800, 0.12, 60, 'sine', 0.15);
+    beep(2200, 0.18, 60, 'sine', 0.15);
+  }
+
+  el('toggle-scan-btn').addEventListener('click', async ()=>{
+    unlockAudio();
+    if(!dataLoaded){
+      showFlash('Still loading roster — try again in a second.', 'warn');
+      return;
+    }
+    if(!el('checkin-session-active').value){
+      showFlash('All trips are currently marked done — reopen one from the Dashboard tab first.', 'warn');
+      return;
+    }
+    if(scanning){
+      try{ await html5QrCode.stop(); }catch(e){}
+      el('scan-box').classList.add('hidden');
+      el('scan-next-btn').style.display = 'none';
+      el('toggle-scan-btn').textContent = 'Start Camera Scan';
+      scanning = false;
+      return;
+    }
+    el('scan-box').classList.remove('hidden');
+    el('scan-next-btn').style.display = 'none';
+    let awaitingNext = false; // true while paused, waiting for the driver to tap "Scan Next"
+    const recentScans = {}; // code -> timestamp of last processed scan (backup guard)
+    const SCAN_COOLDOWN_MS = 3000;
+
+    function pauseAfterScan(){
+      awaitingNext = true;
+      try{ html5QrCode.pause(true); }catch(e){}
+      el('scan-next-btn').style.display = 'block';
+    }
+
+    el('scan-next-btn').onclick = ()=>{
+      awaitingNext = false;
+      el('scan-next-btn').style.display = 'none';
+      el('flash-area').innerHTML = '';
+      try{ html5QrCode.resume(); }catch(e){}
+    };
+
+    try{
+      html5QrCode = new Html5Qrcode('reader');
+      await html5QrCode.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: 220 },
+        async (decodedText)=>{
+          if(awaitingNext) return; // still reviewing the previous scan — ignore anything the camera sees
+          const code = decodedText.trim().toUpperCase();
+          const now = Date.now();
+          if(recentScans[code] && (now - recentScans[code]) < SCAN_COOLDOWN_MS) return;
+          recentScans[code] = now;
+
+          const r = roster.find(x=>x.id === code);
+          if(!r){ showFlash('Code not recognized: ' + code, 'warn', true); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); pauseAfterScan(); return; }
+          const session = activeSession();
+          const key = checkinKey(session, r.id);
+          if(checkins[key]){ showFlash(r.name + ' already checked in for this trip — Shuttle ' + checkins[key].shuttle, 'warn', true); playWarnTone(); if(navigator.vibrate) navigator.vibrate([80,60,80]); pauseAfterScan(); return; }
+          const shuttle = activeShuttle();
+          if(r.assignedShuttle && r.assignedShuttle !== shuttle){
+            showFlash(r.name + ' is assigned to Shuttle ' + r.assignedShuttle + ', not this one — checking in anyway', 'warn', true);
+          }
+          checkins[key] = { time: Date.now(), shuttle };
+          lastScan = { id: r.id, name: r.name, session, shuttle };
+          appendLog({ logId: genId()+Date.now(), personId: r.id, name: r.name, sessionId: session, shuttle, time: Date.now(), action: 'checkin', method: 'scan' });
+          await saveCheckins();
+          if(!r.assignedShuttle || r.assignedShuttle === shuttle){
+            showFlash(r.name + ' checked in — Shuttle ' + shuttle, 'ok', true);
+          }
+          if(navigator.vibrate) navigator.vibrate(150);
+          playSuccessTone();
+          renderCheckinList();
+          renderLiveCounter();
+          pauseAfterScan();
+        },
+        ()=>{}
+      );
+      el('toggle-scan-btn').textContent = 'Stop Camera Scan';
+      scanning = true;
+    }catch(e){
+      showFlash('Camera unavailable in this preview — use the tap-to-check-in list below.', 'warn');
+      el('scan-box').classList.add('hidden');
+    }
+  });
+
+  // ---- Dashboard ----
+  function renderDashboard(){
+    populateSessionSelects();
+    refreshDashboardSessionLabels();
+    el('dashboard-session-select').onchange = renderDashboard;
+    if(roster.length === 0){
+      el('flip-grid').innerHTML = '<p class="muted">Build a passenger list in the Setup tab first.</p>';
+      el('missing-list').innerHTML = '';
+      el('toggle-close-trip-btn').style.display = 'none';
+      el('trip-status-note').textContent = '';
+      return;
+    }
+    if(!dataLoaded){
+      el('flip-grid').innerHTML = '<p class="muted">Loading live data…</p>';
+      el('missing-list').innerHTML = '';
+      el('toggle-close-trip-btn').style.display = 'none';
+      el('trip-status-note').textContent = '';
+      return;
+    }
+    const session = el('dashboard-session-select').value;
+    const letters = shuttleLetters(getShuttleCount());
+    const allClosed = isTripFullyClosed(session);
+    const anyOpen = letters.some(l => !isShuttleClosed(session, l));
+
+    // Bulk convenience toggle: close/reopen every shuttle for this trip at once.
+    const closeBtn = el('toggle-close-trip-btn');
+    closeBtn.style.display = 'inline-block';
+    closeBtn.textContent = allClosed ? 'Reopen All Shuttles' : 'Close All Shuttles for This Trip';
+    closeBtn.onclick = async ()=>{
+      const wasClosingAll = !allClosed; // capture intent before mutating state
+      letters.forEach(l=>{
+        if(allClosed){ delete closedSessions[closedKey(session, l)]; }
+        else { closedSessions[closedKey(session, l)] = true; }
+      });
+      await saveClosedSessions();
+      renderDashboard();
+      populateSessionSelects();
+      populateDriverSelect();
+      renderCheckinList();
+      renderLiveCounter();
+      if(wasClosingAll){
+        showTripReviewModal(session);
+      }
+    };
+    el('trip-status-note').textContent = allClosed
+      ? 'Every shuttle is closed for this trip — it no longer appears in the driver\u2019s trip picker.'
+      : (anyOpen ? 'Tap a shuttle below to close or reopen it individually for this trip.' : '');
+
+    const grid = el('flip-grid');
+    let html = '';
+    letters.forEach(l=>{
+      const boarded = roster.filter(r=>{
+        const c = checkins[checkinKey(session, r.id)];
+        return c && c.shuttle === l;
+      }).length;
+      const closed = isShuttleClosed(session, l);
+      html += `<div class="flip-card">
+        <div class="flip-label">Shuttle ${l}${closed ? ' · Closed' : ''}</div>
+        <div class="flip-value">${boarded}</div>
+        <button class="btn secondary shuttle-toggle-btn" data-shuttle="${l}" style="margin-top:10px; font-size:11px; padding:8px 10px; width:100%;">${closed ? 'Reopen' : 'Close'}</button>
+      </div>`;
+    });
+    const totalAll = roster.length;
+    const boardedAll = roster.filter(r=>checkins[checkinKey(session, r.id)]).length;
+    html += `<div class="flip-card">
+      <div class="flip-label">Total Boarded</div>
+      <div class="flip-value total">${boardedAll}<span style="font-size:18px;color:var(--ink-soft);"> / ${totalAll}</span></div>
+    </div>`;
+    grid.innerHTML = html;
+    grid.querySelectorAll('.shuttle-toggle-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const l = btn.dataset.shuttle;
+        const key = closedKey(session, l);
+        const wasFullyClosed = isTripFullyClosed(session);
+        if(closedSessions[key]){ delete closedSessions[key]; } else { closedSessions[key] = true; }
+        await saveClosedSessions();
+        renderDashboard();
+        populateSessionSelects();
+        populateDriverSelect();
+        renderCheckinList();
+        renderLiveCounter();
+        if(!wasFullyClosed && isTripFullyClosed(session)){
+          showTripReviewModal(session);
+        }
+      });
+    });
+
+    const missing = roster.filter(r=>!checkins[checkinKey(session, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
+    const missingEl = el('missing-list');
+    if(missing.length === 0){
+      missingEl.innerHTML = '<p class="muted">Everyone is accounted for on this trip.</p>';
+    } else {
+      missingEl.innerHTML = missing.map(r=>`<div class="attendee-row">
+        <div>
+          <div class="attendee-name">${escapeHtml(r.name)}</div>
+          ${r.assignedShuttle ? `<div class="attendee-meta">Assigned to Shuttle ${r.assignedShuttle}</div>` : ''}
+        </div>
+      </div>`).join('');
+    }
+  }
+
+  // ---- Log ----
+  function populateLogFilter(){
+    const sel = el('log-session-filter');
+    if(sel.options.length <= 1){
+      sel.innerHTML = '<option value="all">All Trips</option>' + SESSIONS.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+    }
+  }
+
+
+
+  function renderLog(){
+    populateLogFilter();
+    if(!dataLoaded){
+      el('log-list').innerHTML = '<p class="muted">Loading log…</p>';
+      return;
+    }
+    const sessionFilter = el('log-session-filter').value;
+    const q = el('log-search').value.trim().toLowerCase();
+    let entries = logs.slice();
+    if(sessionFilter !== 'all') entries = entries.filter(e=>e.sessionId === sessionFilter);
+    if(q) entries = entries.filter(e=>(e.name||'').toLowerCase().includes(q));
+    entries.sort((a,b)=> b.time - a.time);
+    const listEl = el('log-list');
+    if(entries.length === 0){ listEl.innerHTML = '<p class="muted">No scan activity yet for this filter.</p>'; return; }
+    listEl.innerHTML = entries.map(e=>{
+      const actionLabel = e.action === 'undo' ? 'Undo' : 'Checked in';
+      const actionColor = e.action === 'undo' ? 'var(--red)' : 'var(--teal)';
+      const methodLabel = e.method === 'scan' ? 'Camera scan' : (e.method === 'undo-last' ? 'Undo last' : 'Manual tap');
+      return `<div class="attendee-row">
+        <div>
+          <div class="attendee-name">${escapeHtml(e.name || e.personId)}</div>
+          <div class="attendee-meta">${sessionLabel(e.sessionId)} · Shuttle ${e.shuttle} · ${methodLabel} · ${new Date(e.time).toLocaleString()}</div>
+        </div>
+        <span style="font-family:var(--mono); font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:${actionColor};">${actionLabel}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // ---- Live sync from Firestore (fires immediately on load, then on every change from any device) ----
+  if(isConfigured){
+    eventDocRef.onSnapshot(
+      doc => onRemoteUpdate(doc.data()),
+      err => { console.error('Firestore sync error', err); document.getElementById('config-banner').classList.remove('hidden'); }
+    );
+  } else {
+    renderCheckin();
+    renderDashboard();
+  }
+})();
+</script>
+
+<script>
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    });
+  }
+</script>
+
+</body>
+</html>

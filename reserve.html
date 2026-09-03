@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shuttle Reservation</title>
+
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#0F1C33">
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --navy:#0F1C33; --navy-panel:#182A4A; --navy-panel-2:#20365E;
+    --amber:#FFB020; --teal:#3FD9C0; --red:#FF6B6B; --paper:#EAEFF2; --ink-soft:#4A5A78;
+    --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{ font-family: var(--sans); background: var(--navy); color: var(--paper); margin:0; padding:0; min-height:100vh; }
+  .header{ background: linear-gradient(180deg, var(--navy-panel) 0%, var(--navy) 100%); padding: 20px; border-bottom: 2px solid var(--navy-panel-2); }
+  .eyebrow{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--amber); text-transform: uppercase; margin: 0 0 4px 0; }
+  h1{ font-size: 20px; margin: 0; font-weight: 700; }
+  .panel{ padding: 20px; max-width: 560px; margin: 0 auto; }
+  .card{ background: var(--navy-panel); border: 1px solid var(--navy-panel-2); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+  .card h2{ font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--amber); margin: 0 0 12px 0; font-family: var(--mono); }
+  label{ display:block; font-size: 12px; color: var(--ink-soft); margin-bottom: 6px; font-family: var(--mono); letter-spacing: 0.04em; }
+  select, input[type=text]{
+    width: 100%; background: var(--navy); border: 1px solid var(--navy-panel-2); color: var(--paper);
+    border-radius: 6px; padding: 10px 12px; font-family: var(--sans); font-size: 14px; margin-bottom: 14px;
+  }
+  .muted{ color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+  .row{ display:flex; gap: 10px; flex-wrap: wrap; }
+  #passenger-suggestions{ margin-top:-8px; margin-bottom: 10px; }
+  .suggestion-item{
+    padding: 10px 12px; border: 1px solid var(--navy-panel-2); border-top:none;
+    cursor: pointer; font-size: 14px; background: var(--navy);
+  }
+  .suggestion-item:hover, .suggestion-item:active{ background: var(--navy-panel-2); }
+  .suggestion-item:first-child{ border-top: 1px solid var(--navy-panel-2); }
+  .suggestion-empty{ padding: 10px 12px; color: var(--ink-soft); font-size: 13px; }
+  .departure-option{
+    display:flex; justify-content:space-between; align-items:center;
+    background: var(--navy); border: 1px solid var(--navy-panel-2); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 10px;
+  }
+  .departure-option.selected{ border-color: var(--teal); background: rgba(63,217,192,0.08); }
+  .departure-option.full{ opacity: 0.5; }
+  .departure-name{ font-weight: 600; font-size: 15px; }
+  .departure-seats{ font-family: var(--mono); font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .departure-seats.low{ color: var(--amber); }
+  .departure-seats.full{ color: var(--red); }
+  .btn{
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;
+    background: var(--amber); color: var(--navy); border: none; border-radius: 6px;
+    padding: 10px 16px; cursor: pointer; font-weight: 700;
+  }
+  .btn:disabled{ opacity: 0.4; cursor: not-allowed; }
+  .btn.current{ background: var(--teal); }
+  .flash{
+    padding: 12px 14px; border-radius: 8px; font-family: var(--mono); font-size: 13px; margin-bottom: 14px;
+  }
+  .flash.ok{ background: rgba(63,217,192,0.15); color: var(--teal); border:1px solid var(--teal); }
+  .flash.warn{ background: rgba(255,107,107,0.15); color: var(--red); border:1px solid var(--red); }
+  #config-banner{
+    background: var(--red); color: var(--navy); font-family: var(--mono); font-size: 12px;
+    padding: 10px 20px; text-align: center; font-weight: 700;
+  }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+
+<div id="config-banner" class="hidden">⚠ Firebase isn't configured in this file yet.</div>
+<div class="header">
+  <p class="eyebrow">Shuttle Reservation</p>
+  <h1>Pick Your Departure</h1>
+</div>
+
+<div class="panel">
+  <div class="card">
+    <h2>1 · Who are you?</h2>
+    <div id="identity-search-block">
+      <label for="passenger-search">Type your name</label>
+      <input type="text" id="passenger-search" placeholder="Start typing your full name..." autocomplete="off">
+      <div id="passenger-suggestions"></div>
+    </div>
+    <div id="identity-confirm-block" class="hidden">
+      <p class="muted" style="margin-bottom:10px;">You selected:</p>
+      <p style="font-size:18px; font-weight:700; margin:0 0 14px 0;" id="identity-confirm-name"></p>
+      <div id="identity-phone-step">
+        <label for="identity-phone-input">Last 4 digits of your phone number</label>
+        <input type="text" id="identity-phone-input" placeholder="1234" maxlength="4" inputmode="numeric" autocomplete="off">
+        <div class="row" style="gap:10px;">
+          <button class="btn" id="identity-phone-submit-btn">Confirm</button>
+          <button class="btn secondary" id="identity-confirm-no-btn">Not me — search again</button>
+        </div>
+      </div>
+      <div id="identity-verified-line" class="hidden">
+        <div class="row" style="gap:10px;">
+          <button class="btn secondary" id="identity-confirm-no-btn-2">Not you? Tap here</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="trip-card" style="display:none;">
+    <h2>2 · Choose a trip</h2>
+    <label for="trip-select">Trip</label>
+    <select id="trip-select"></select>
+  </div>
+
+  <div id="flash-area"></div>
+
+  <div class="card" id="departures-card" style="display:none;">
+    <h2 id="departures-title">3 · Choose your departure</h2>
+    <div id="departures-list"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ============================================================
+  // Uses the SAME Firebase project as the driver app — paste the
+  // identical firebaseConfig from index.html here.
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyAguMsCqZUv7uR7ynEmkF4-9Br8q4i2b6Q",
+    authDomain: "conference-shuttle-check-in.firebaseapp.com",
+    projectId: "conference-shuttle-check-in",
+    storageBucket: "conference-shuttle-check-in.firebasestorage.app",
+    messagingSenderId: "776056185305",
+    appId: "1:776056185305:web:0c66173debf886a5a3f9c8"
+  };
+
+  const isConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('PASTE_');
+  let eventDocRef = null;
+  if(isConfigured){
+    firebase.initializeApp(firebaseConfig);
+    eventDocRef = firebase.firestore().collection('shuttleEvents').doc('current-event');
+  } else {
+    document.getElementById('config-banner').classList.remove('hidden');
+  }
+
+  const SESSIONS = [
+    { id: 'd1-am', label: 'Day 1 · Morning' },
+    { id: 'd1-pm', label: 'Day 1 · Afternoon' },
+    { id: 'd1-eve-hub', label: 'Day 1 · Evening to HUB Stadium' },
+    { id: 'd1-eve-hotel', label: 'Day 1 · Evening to Hotel' },
+    { id: 'd2-am', label: 'Day 2 · Morning' },
+    { id: 'd2-pm', label: 'Day 2 · Afternoon' },
+    { id: 'd2-eve-dinner', label: 'Day 2 · Evening to Dinner' },
+    { id: 'd2-eve-hotel', label: 'Day 2 · Evening to Hotel' }
+  ];
+  const closedKey = (sessionId, shuttle) => sessionId + '::' + shuttle;
+  const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
+  const el = id => document.getElementById(id);
+
+  let roster = [];
+  let shuttleSchedule = {};
+  let reservations = {};
+  let dataLoaded = false;
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function showFlash(msg, type){
+    el('flash-area').innerHTML = `<div class="flash ${type}">${msg}</div>`;
+  }
+
+  // ---- Identity: type-to-search + mandatory confirmation (no dropdown to misclick in) ----
+  let selectedPersonId = null;
+  let pendingPersonId = null;
+
+  function showIdentityConfirmed(){
+    const person = roster.find(r=>r.id===selectedPersonId);
+    el('identity-search-block').classList.add('hidden');
+    el('identity-confirm-block').classList.remove('hidden');
+    el('identity-confirm-name').textContent = person ? person.name : '';
+    el('identity-phone-step').classList.add('hidden');
+    el('identity-verified-line').classList.remove('hidden');
+    el('trip-card').style.display = 'block';
+  }
+
+  function showIdentityPending(personId){
+    pendingPersonId = personId;
+    const person = roster.find(r=>r.id===personId);
+    el('identity-search-block').classList.add('hidden');
+    el('identity-confirm-block').classList.remove('hidden');
+    el('identity-confirm-name').textContent = person ? person.name : '';
+    el('identity-phone-step').classList.remove('hidden');
+    el('identity-verified-line').classList.add('hidden');
+    el('identity-phone-input').value = '';
+    el('flash-area').innerHTML = '';
+    el('identity-phone-input').focus();
+  }
+
+  function showIdentitySearch(){
+    selectedPersonId = null;
+    pendingPersonId = null;
+    localStorage.removeItem('shuttle_reservation_person_id');
+    el('identity-confirm-block').classList.add('hidden');
+    el('identity-search-block').classList.remove('hidden');
+    el('passenger-search').value = '';
+    el('passenger-suggestions').innerHTML = '';
+    el('trip-card').style.display = 'none';
+    el('departures-card').style.display = 'none';
+    el('flash-area').innerHTML = '';
+  }
+
+  function renderSuggestions(query){
+    const box = el('passenger-suggestions');
+    const q = query.trim().toLowerCase();
+    if(q.length === 0){ box.innerHTML = ''; return; }
+    const matches = roster.filter(r => r.name.toLowerCase().includes(q)).slice(0, 8);
+    if(matches.length === 0){
+      box.innerHTML = '<div class="suggestion-empty">No matching name on the passenger list. Check your spelling, or contact the event organizer.</div>';
+      return;
+    }
+    box.innerHTML = matches.map(r=>`<div class="suggestion-item" data-id="${r.id}">${escapeHtml(r.name)}</div>`).join('');
+    box.querySelectorAll('.suggestion-item').forEach(item=>{
+      item.addEventListener('click', ()=> showIdentityPending(item.dataset.id));
+    });
+  }
+
+  el('passenger-search').addEventListener('input', ()=> renderSuggestions(el('passenger-search').value));
+
+  function attemptPhoneVerification(){
+    if(!pendingPersonId) return;
+    const person = roster.find(r=>r.id===pendingPersonId);
+    if(!person) return;
+    const entered = el('identity-phone-input').value.replace(/\D/g, '');
+    if(!person.phone){
+      showFlash('Phone verification isn\u2019t set up for you yet. Contact the event organizer to reserve on your behalf, or ask them to add your number.', 'warn');
+      return;
+    }
+    if(entered.length !== 4){
+      showFlash('Enter all 4 digits.', 'warn');
+      return;
+    }
+    if(entered !== person.phone){
+      showFlash('That doesn\u2019t match our records. Check the number and try again, or contact the event organizer.', 'warn');
+      return;
+    }
+    selectedPersonId = pendingPersonId;
+    localStorage.setItem('shuttle_reservation_person_id', selectedPersonId);
+    showIdentityConfirmed();
+    renderDepartures();
+  }
+
+  el('identity-phone-submit-btn').addEventListener('click', attemptPhoneVerification);
+  el('identity-phone-input').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') attemptPhoneVerification(); });
+  el('identity-confirm-no-btn').addEventListener('click', showIdentitySearch);
+  el('identity-confirm-no-btn-2').addEventListener('click', showIdentitySearch);
+
+  function restoreIdentityFromStorage(){
+    if(selectedPersonId) return; // already active this session
+    const stored = localStorage.getItem('shuttle_reservation_person_id');
+    if(stored && roster.some(r=>r.id===stored)){
+      selectedPersonId = stored;
+      showIdentityConfirmed();
+    }
+  }
+
+  function populateTripSelect(){
+    const sel = el('trip-select');
+    if(sel.options.length > 0) return; // populate once
+    sel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+  }
+
+  function shuttlesConfiguredFor(sessionId){
+    // Any shuttle letter A-J that has a schedule entry for this session
+    const letters = 'ABCDEFGHIJ'.split('');
+    return letters.filter(l => shuttleSchedule[closedKey(sessionId, l)]);
+  }
+
+  function renderDepartures(){
+    const personId = selectedPersonId;
+    const sessionId = el('trip-select').value;
+    el('flash-area').innerHTML = '';
+    if(!personId || !sessionId){ el('departures-card').style.display = 'none'; return; }
+    if(!dataLoaded){ el('departures-card').style.display = 'none'; return; }
+
+    const letters = shuttlesConfiguredFor(sessionId);
+    const sessionLabel = (SESSIONS.find(s=>s.id===sessionId) || {}).label || sessionId;
+
+    if(letters.length === 0){
+      el('departures-title').textContent = '3 · Choose your departure — ' + sessionLabel;
+      el('departures-card').style.display = 'block';
+      el('departures-list').innerHTML = '<p class="muted">Reservations aren\u2019t open for this trip yet. Check back later or ask the event organizer.</p>';
+      return;
+    }
+
+    const myKey = checkinKey(sessionId, personId);
+    const myReservation = reservations[myKey];
+    el('departures-card').style.display = 'block';
+
+    // Once reserved, lock it — no self-service changes. Only an admin clearing/reassigning it reopens this.
+    if(myReservation){
+      const cfg = shuttleSchedule[closedKey(sessionId, myReservation)];
+      el('departures-title').textContent = 'Your Reservation — ' + sessionLabel;
+      el('departures-list').innerHTML = `
+        <div class="departure-option selected">
+          <div>
+            <div class="departure-name">${cfg ? escapeHtml(cfg.time) : ''} · Shuttle ${myReservation}</div>
+            <div class="departure-seats" style="color:var(--teal);">Confirmed</div>
+          </div>
+          <button class="btn current" disabled>Reserved ✓</button>
+        </div>
+        <p class="muted" style="margin-top:10px;">Your reservation is locked in. If you need to change it, contact the event organizer — they can update it on their end.</p>`;
+      return;
+    }
+
+    el('departures-title').textContent = '3 · Choose your departure — ' + sessionLabel;
+    el('departures-list').innerHTML = letters.map(l=>{
+      const cfg = shuttleSchedule[closedKey(sessionId, l)];
+      const count = Object.entries(reservations).filter(([k,v]) => k.startsWith(sessionId+'::') && v===l).length;
+      const seatsLeft = Math.max(0, cfg.capacity - count);
+      const isFull = seatsLeft <= 0;
+      let seatsClass = '';
+      if(seatsLeft === 0) seatsClass = 'full';
+      else if(seatsLeft <= 3) seatsClass = 'low';
+      return `<div class="departure-option ${isFull ? 'full' : ''}">
+        <div>
+          <div class="departure-name">${escapeHtml(cfg.time)} · Shuttle ${l}</div>
+          <div class="departure-seats ${seatsClass}">${isFull ? 'Full' : seatsLeft + ' seat' + (seatsLeft===1?'':'s') + ' left'}</div>
+        </div>
+        <button class="btn" data-shuttle="${l}" ${isFull ? 'disabled' : ''}>Reserve</button>
+      </div>`;
+    }).join('');
+
+    el('departures-list').querySelectorAll('button[data-shuttle]').forEach(btn=>{
+      btn.addEventListener('click', ()=> reserveShuttle(sessionId, personId, btn.dataset.shuttle));
+    });
+  }
+
+  async function reserveShuttle(sessionId, personId, shuttle){
+    if(!isConfigured) return;
+    const key = checkinKey(sessionId, personId);
+    if(reservations[key]){
+      // Reservations are locked once made — this guards against a stale cached page
+      // still showing selectable buttons. Changes go through the organizer only.
+      showFlash('You already have a reservation for this trip. Contact the event organizer to change it.', 'warn');
+      renderDepartures();
+      return;
+    }
+    // Re-check capacity against the latest local snapshot right before writing —
+    // narrows the race window without needing a full transaction for this scale of event.
+    const cfg = shuttleSchedule[closedKey(sessionId, shuttle)];
+    const count = Object.entries(reservations).filter(([k,v]) => k.startsWith(sessionId+'::') && v===shuttle).length;
+    if(cfg && count >= cfg.capacity){
+      showFlash('Sorry — that departure just filled up. Pick another.', 'warn');
+      renderDepartures();
+      return;
+    }
+    try{
+      await eventDocRef.update({ ['reservations.' + key]: shuttle });
+      localStorage.setItem('shuttle_reservation_person_id', personId);
+      showFlash('Reservation confirmed — ' + cfg.time + ' · Shuttle ' + shuttle + '.', 'ok');
+    }catch(e){
+      console.error('Reservation failed', e);
+      showFlash('Something went wrong saving your reservation. Try again.', 'warn');
+    }
+  }
+
+  el('trip-select').addEventListener('change', renderDepartures);
+
+  function onRemoteUpdate(data){
+    roster = (data && data.roster) || [];
+    shuttleSchedule = (data && data.shuttleSchedule) || {};
+    reservations = (data && data.reservations) || {};
+    dataLoaded = true;
+    restoreIdentityFromStorage();
+    populateTripSelect();
+    renderDepartures();
+  }
+
+  if(isConfigured){
+    eventDocRef.onSnapshot(
+      doc => onRemoteUpdate(doc.data()),
+      err => { console.error('Firestore sync error', err); document.getElementById('config-banner').classList.remove('hidden'); }
+    );
+  }
+})();
+</script>
+
+</body>
+</html>

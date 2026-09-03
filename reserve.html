@@ -11,7 +11,6 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 
 <style>
   :root{
@@ -151,11 +150,7 @@
   <div class="card hidden" id="summary-card">
     <h2>Review Your Selections</h2>
     <div id="summary-list"></div>
-    <div id="email-field-block" class="hidden" style="margin-top:16px;">
-      <label for="passenger-email">Email (optional) — we'll send you a copy of your confirmed selections</label>
-      <input type="text" id="passenger-email" placeholder="you@example.com" autocomplete="email">
-    </div>
-    <div class="row" style="margin-top:4px; gap:10px;">
+    <div class="row" style="margin-top:16px; gap:10px;">
       <button class="btn" id="confirm-save-btn">Confirm &amp; Save</button>
       <button class="btn secondary" id="back-to-edit-btn">Back to Edit</button>
     </div>
@@ -196,30 +191,6 @@
     eventDocRef = firebase.firestore().collection('shuttleEvents').doc('current-event');
   } else {
     document.getElementById('config-banner').classList.remove('hidden');
-  }
-
-  // ============================================================
-  // EMAIL CONFIRMATIONS (optional) — sent via EmailJS, a free service
-  // that sends email straight from this page, no backend needed.
-  // 1. Go to https://www.emailjs.com and create a free account
-  // 2. Email Services → Add New Service → connect Gmail/Outlook/etc → note the Service ID
-  // 3. Email Templates → Create New Template. Use these variables in the template body:
-  //      {{to_email}}  {{to_name}}  {{selections_text}}
-  //    Example body: "Hi {{to_name}}, here are your confirmed shuttle reservations:
-  //      {{selections_text}}"
-  //    Note the Template ID.
-  // 4. Account → General → copy your Public Key.
-  // 5. Paste all three below, replacing the placeholders.
-  // If left as placeholders, the email field simply won't appear — everything else still works.
-  // ============================================================
-  const EMAILJS_CONFIG = {
-    publicKey: "OPU-HlMnD0rbcHDoD",
-    serviceId: "service_jp4ptow",
-    templateId: "template_pfiewok"
-  };
-  const isEmailConfigured = EMAILJS_CONFIG.publicKey && !EMAILJS_CONFIG.publicKey.startsWith('PASTE_');
-  if(isEmailConfigured && window.emailjs){
-    emailjs.init({ publicKey: EMAILJS_CONFIG.publicKey });
   }
 
   const SESSIONS = [
@@ -310,9 +281,16 @@
     const box = el('passenger-suggestions');
     const q = query.trim().toLowerCase();
     if(q.length === 0){ box.innerHTML = ''; return; }
-    const matches = roster.filter(r => r.name.toLowerCase().includes(q)).slice(0, 8);
+    const allMatches = roster.filter(r => r.name.toLowerCase().includes(q));
+    const matches = allMatches.filter(r => !reservationSubmitted[r.id]).slice(0, 8);
     if(matches.length === 0){
-      box.innerHTML = '<div class="suggestion-empty">No matching name on the passenger list. Check your spelling, or contact the event organizer.</div>';
+      if(allMatches.length > 0){
+        // Every name matching this search has already submitted — hidden from search on purpose,
+        // so someone else typing their name can't see their choices.
+        box.innerHTML = '<div class="suggestion-empty">If this is you and you already submitted, reopen this page on the same device/browser you used before — it\u2019ll recognize you automatically. Otherwise contact the event organizer.</div>';
+      } else {
+        box.innerHTML = '<div class="suggestion-empty">No matching name on the passenger list. Check your spelling, or contact the event organizer.</div>';
+      }
       return;
     }
     box.innerHTML = matches.map(r=>`<div class="suggestion-item" data-id="${r.id}">${escapeHtml(r.name)}</div>`).join('');
@@ -460,7 +438,6 @@
         <div class="summary-choice ${cls}">${text}</div>
       </div>`;
     }).join('');
-    el('email-field-block').classList.toggle('hidden', !isEmailConfigured);
   }
 
   el('back-to-edit-btn').addEventListener('click', ()=>{
@@ -516,37 +493,14 @@
     trips.forEach(s=>{
       updates['reservations.' + checkinKey(s.id, selectedPersonId)] = tentativeSelections[s.id];
     });
-    const email = isEmailConfigured ? el('passenger-email').value.trim() : '';
-    if(email) updates['reservationEmails.' + selectedPersonId] = email;
     try{
       await eventDocRef.update(updates);
       localStorage.setItem('shuttle_reservation_person_id', selectedPersonId);
       showFlash('All set — your reservations are saved.', 'ok');
-      if(email) sendConfirmationEmail(email, trips);
     }catch(e){
       console.error('Save failed', e);
       showFlash('Something went wrong saving your reservations. Try again.', 'warn');
     }
-  }
-
-  function sendConfirmationEmail(email, trips){
-    if(!isEmailConfigured || !window.emailjs) return;
-    const person = roster.find(r=>r.id===selectedPersonId);
-    const lines = trips.map(s=>{
-      const val = tentativeSelections[s.id];
-      let text;
-      if(val === SKIP) text = 'No shuttle needed';
-      else{
-        const cfg = shuttleSchedule[closedKey(s.id, val)];
-        text = (cfg ? cfg.time + ' · ' : '') + 'Shuttle ' + val;
-      }
-      return s.label + ': ' + text;
-    });
-    emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, {
-      to_email: email,
-      to_name: person ? person.name : '',
-      selections_text: lines.join('\n')
-    }).catch(e => console.error('Email send failed (reservation itself was still saved)', e));
   }
 
   function onRemoteUpdate(data){

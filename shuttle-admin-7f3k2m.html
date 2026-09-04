@@ -299,8 +299,11 @@ Alex Kim
       </div>
 
       <div class="card" id="roster-preview-card" style="display:none;">
-        <h2>2 · Passenger List</h2>
-        <p class="muted" style="margin-top:-6px;">Everyone below gets one QR boarding pass. Which shuttle someone boards is handled entirely through the Reservations tab now — passengers pick it themselves on the reservation page. The phone field is optional contact info, not currently used for verification.</p>
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <h2 style="margin:0;">2 · Passenger List</h2>
+          <button class="btn secondary" id="toggle-roster-list-btn" style="margin-bottom:0;">Minimize</button>
+        </div>
+        <p class="muted" style="margin-top:8px;">Everyone below gets one QR boarding pass. Which shuttle someone boards is handled entirely through the Reservations tab now — passengers pick it themselves on the reservation page. The phone field is optional contact info, not currently used for verification.</p>
         <div id="roster-table"></div>
       </div>
 
@@ -316,8 +319,11 @@ Alex Kim
       </div>
 
       <div class="card">
-        <h2>4 · Shuttle Schedule &amp; Capacity</h2>
-        <p class="muted" style="margin-top:-6px;">Set a departure time and seat capacity for each shuttle on each trip. Only trips you fill in here will show up on the passenger reservation page — leave a row blank to skip reservations for that trip/shuttle.</p>
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <h2 style="margin:0;">4 · Shuttle Schedule &amp; Capacity</h2>
+          <button class="btn secondary" id="toggle-schedule-table-btn" style="margin-bottom:0;">Minimize</button>
+        </div>
+        <p class="muted" style="margin-top:8px;">Check which shuttles actually run each trip, then set a departure time and seat capacity for each one. Only shuttles checked here, with a time filled in, show up on the passenger reservation page.</p>
         <div id="shuttle-schedule-table"></div>
       </div>
 
@@ -470,7 +476,7 @@ Alex Kim
   let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
   let shuttleCount = 3; // synced across all devices now, not a local-only setting
-  let tripShuttleCounts = {}; // {sessionId: count} — optional per-trip override of shuttleCount (e.g. fewer buses on a smaller trip)
+  let tripShuttleLetters = {}; // {sessionId: ['A','C','D']} — which specific shuttles run this trip; absent = all of them (up to shuttleCount)
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -540,8 +546,7 @@ Alex Kim
   }
 
   function shuttleLettersFor(sessionId){
-    const n = tripShuttleCounts[sessionId] || shuttleCount;
-    return shuttleLetters(n);
+    return tripShuttleLetters[sessionId] || shuttleLetters(shuttleCount);
   }
 
   async function saveShuttleCount(){
@@ -550,8 +555,8 @@ Alex Kim
     catch(e){ console.error('Failed to save shuttle count', e); }
   }
 
-  async function saveTripShuttleCounts(){
-    await saveMapField('tripShuttleCounts', tripShuttleCounts);
+  async function saveTripShuttleLetters(){
+    await saveMapField('tripShuttleLetters', tripShuttleLetters);
   }
 
   async function saveRoster(){
@@ -637,7 +642,7 @@ Alex Kim
     reservations = (data && data.reservations) || {};
     reservationSubmitted = (data && data.reservationSubmitted) || {};
     shuttleCount = (data && data.shuttleCount) || 3;
-    tripShuttleCounts = (data && data.tripShuttleCounts) || {};
+    tripShuttleLetters = (data && data.tripShuttleLetters) || {};
     el('shuttle-count').value = shuttleCount;
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
@@ -692,6 +697,20 @@ Alex Kim
     await saveCheckins();
     el('setup-status').textContent = `Roster built: ${roster.length} attendees. Tracking ${shuttleN} shuttle(s) — first come, first served.`;
     renderRosterPreview();
+  });
+
+  el('toggle-roster-list-btn').addEventListener('click', ()=>{
+    const table = el('roster-table');
+    const collapsed = table.style.display === 'none';
+    table.style.display = collapsed ? 'block' : 'none';
+    el('toggle-roster-list-btn').textContent = collapsed ? 'Minimize' : 'Expand';
+  });
+
+  el('toggle-schedule-table-btn').addEventListener('click', ()=>{
+    const table = el('shuttle-schedule-table');
+    const collapsed = table.style.display === 'none';
+    table.style.display = collapsed ? 'block' : 'none';
+    el('toggle-schedule-table-btn').textContent = collapsed ? 'Minimize' : 'Expand';
   });
 
   el('add-more-btn').addEventListener('click', async ()=>{
@@ -800,6 +819,7 @@ Alex Kim
     shuttleSchedule = {};
     reservations = {};
     reservationSubmitted = {};
+    tripShuttleLetters = {};
     lastScan = null;
     await saveRoster();
     await saveCheckins();
@@ -808,6 +828,7 @@ Alex Kim
     await saveShuttleSchedule();
     await saveMapField('reservations', reservations);
     await saveMapField('reservationSubmitted', reservationSubmitted);
+    await saveTripShuttleLetters();
     if(isConfigured){
       try{ await eventDocRef.update({ logs: [] }); }
       catch(e){ console.error('Failed to clear log', e); }
@@ -881,17 +902,21 @@ Alex Kim
   function renderShuttleScheduleTable(){
     const table = el('shuttle-schedule-table');
     if(!table) return;
+    const allLetters = shuttleLetters(shuttleCount);
     let html = '';
     SESSIONS.forEach(s=>{
-      const tripCount = tripShuttleCounts[s.id] || shuttleCount;
-      const letters = shuttleLettersFor(s.id);
+      const activeLetters = new Set(shuttleLettersFor(s.id));
       html += `<div class="attendee-row" style="flex-wrap:wrap;">
-        <div style="flex-basis:100%; margin-bottom:6px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-          <strong style="font-size:13px;">${s.label}</strong>
+        <div style="flex-basis:100%; margin-bottom:8px;"><strong style="font-size:13px;">${s.label}</strong></div>
+        <div style="flex-basis:100%; margin-bottom:10px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
           <span class="attendee-meta">Shuttles running this trip:</span>
-          <input type="number" class="trip-shuttle-count-input" data-session="${s.id}" min="1" max="10" value="${tripCount}" style="margin-bottom:0; width:60px;">
+          ${allLetters.map(l=>`
+            <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer;">
+              <input type="checkbox" class="trip-shuttle-toggle" data-session="${s.id}" data-letter="${l}" ${activeLetters.has(l) ? 'checked' : ''} style="width:auto; margin:0;">
+              Shuttle ${l}
+            </label>`).join('')}
         </div>`;
-      letters.forEach(l=>{
+      allLetters.filter(l=>activeLetters.has(l)).forEach(l=>{
         const key = closedKey(s.id, l);
         const cfg = shuttleSchedule[key] || { time: '', capacity: 14 };
         html += `
@@ -905,16 +930,28 @@ Alex Kim
       html += `</div>`;
     });
     table.innerHTML = html;
-    table.querySelectorAll('.trip-shuttle-count-input').forEach(input=>{
-      input.addEventListener('change', async ()=>{
-        const sessionId = input.dataset.session;
-        const n = Math.max(1, Math.min(10, parseInt(input.value, 10) || shuttleCount));
-        if(n === shuttleCount){
-          delete tripShuttleCounts[sessionId]; // matches the global default — no override needed
+    table.querySelectorAll('.trip-shuttle-toggle').forEach(cb=>{
+      cb.addEventListener('change', async ()=>{
+        const sessionId = cb.dataset.session;
+        const letter = cb.dataset.letter;
+        const current = new Set(shuttleLettersFor(sessionId));
+        if(cb.checked){ current.add(letter); } else { current.delete(letter); }
+        // Store as an override only if it actually differs from "all shuttles" (the default) —
+        // keeps the data tidy and matches how the count-based version behaved before.
+        const allSet = new Set(allLetters);
+        const isDefault = current.size === allSet.size && [...current].every(l=>allSet.has(l));
+        if(isDefault){
+          delete tripShuttleLetters[sessionId];
         } else {
-          tripShuttleCounts[sessionId] = n;
+          tripShuttleLetters[sessionId] = allLetters.filter(l=>current.has(l)); // keep A-Z order regardless of click order
         }
-        await saveTripShuttleCounts();
+        // Clean up any schedule entry for a shuttle just excluded — otherwise it could keep
+        // quietly showing up on the reservation page even after being unchecked here.
+        if(!cb.checked){
+          const key = closedKey(sessionId, letter);
+          if(shuttleSchedule[key]){ delete shuttleSchedule[key]; await saveShuttleSchedule(); }
+        }
+        await saveTripShuttleLetters();
         renderShuttleScheduleTable();
       });
     });

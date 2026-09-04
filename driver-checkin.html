@@ -352,7 +352,7 @@
   let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
   let shuttleCount = 3; // synced from the admin app — kept in sync automatically, no local editing needed here
-  let tripShuttleCounts = {}; // {sessionId: count} — per-trip override, synced from admin app
+  let tripShuttleLetters = {}; // {sessionId: ['A','C','D']} — which specific shuttles run this trip; synced from admin app
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -422,8 +422,7 @@
   }
 
   function shuttleLettersFor(sessionId){
-    const n = tripShuttleCounts[sessionId] || shuttleCount;
-    return shuttleLetters(n);
+    return tripShuttleLetters[sessionId] || shuttleLetters(shuttleCount);
   }
 
   async function saveRoster(){
@@ -509,7 +508,7 @@
     reservations = (data && data.reservations) || {};
     reservationSubmitted = (data && data.reservationSubmitted) || {};
     shuttleCount = (data && data.shuttleCount) || 3;
-    tripShuttleCounts = (data && data.tripShuttleCounts) || {};
+    tripShuttleLetters = (data && data.tripShuttleLetters) || {};
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
     if(activeTab === 'checkin'){ populateSessionSelects(); populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }

@@ -328,6 +328,12 @@ Alex Kim
       </div>
 
       <div class="card">
+        <h2>Clear Reservations</h2>
+        <p class="muted" style="margin-top:-6px;">Clears everyone's reservations and unlocks the reservation page for all passengers again — useful while testing. Leaves the passenger list, drivers, shuttle schedule, and check-ins untouched.</p>
+        <button class="btn danger" id="clear-reservations-btn">Clear All Reservations</button>
+      </div>
+
+      <div class="card">
         <h2>Reset</h2>
         <p class="muted" style="margin-top:-6px;">Clears the passenger list, drivers, shuttle schedule, reservations, and all check-ins for everyone on this event. Use between events, not during one.</p>
         <button class="btn danger" id="reset-btn">Reset Event Data</button>
@@ -464,6 +470,7 @@ Alex Kim
   let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
   let shuttleCount = 3; // synced across all devices now, not a local-only setting
+  let tripShuttleCounts = {}; // {sessionId: count} — optional per-trip override of shuttleCount (e.g. fewer buses on a smaller trip)
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -482,7 +489,7 @@ Alex Kim
   const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
   const closedKey = (sessionId, shuttle) => sessionId + '::' + shuttle;
   const isShuttleClosed = (sessionId, shuttle) => !!closedSessions[closedKey(sessionId, shuttle)];
-  const isTripFullyClosed = (sessionId) => shuttleLettersGlobal().every(l => isShuttleClosed(sessionId, l));
+  const isTripFullyClosed = (sessionId) => shuttleLettersFor(sessionId).every(l => isShuttleClosed(sessionId, l));
   function shuttleLettersGlobal(){ return shuttleLetters(getShuttleCount()); }
 
   const el = id => document.getElementById(id);
@@ -532,10 +539,19 @@ Alex Kim
     return shuttleCount;
   }
 
+  function shuttleLettersFor(sessionId){
+    const n = tripShuttleCounts[sessionId] || shuttleCount;
+    return shuttleLetters(n);
+  }
+
   async function saveShuttleCount(){
     if(!isConfigured) return;
     try{ await eventDocRef.set({ shuttleCount }, { merge: true }); }
     catch(e){ console.error('Failed to save shuttle count', e); }
+  }
+
+  async function saveTripShuttleCounts(){
+    await saveMapField('tripShuttleCounts', tripShuttleCounts);
   }
 
   async function saveRoster(){
@@ -621,6 +637,7 @@ Alex Kim
     reservations = (data && data.reservations) || {};
     reservationSubmitted = (data && data.reservationSubmitted) || {};
     shuttleCount = (data && data.shuttleCount) || 3;
+    tripShuttleCounts = (data && data.tripShuttleCounts) || {};
     el('shuttle-count').value = shuttleCount;
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
@@ -761,6 +778,18 @@ Alex Kim
     renderDashboard();
   });
 
+  el('clear-reservations-btn').addEventListener('click', async ()=>{
+    if(!confirm('Clear everyone\'s reservations and unlock the reservation page for all passengers again? The passenger list, drivers, shuttle schedule, and check-ins stay untouched. Cannot be undone.')) return;
+    reservations = {};
+    reservationSubmitted = {};
+    await saveMapField('reservations', reservations);
+    await saveMapField('reservationSubmitted', reservationSubmitted);
+    el('setup-status').textContent = 'All reservations cleared.';
+    renderReservationsTab();
+    renderCheckinList();
+    renderLiveCounter();
+  });
+
   el('reset-btn').addEventListener('click', async ()=>{
     if(!confirm('This clears the passenger list, drivers, shuttle schedule, reservations, all check-ins, trip open/closed status, and the scan log for everyone viewing this event. Continue?')) return;
     roster = [];
@@ -852,11 +881,16 @@ Alex Kim
   function renderShuttleScheduleTable(){
     const table = el('shuttle-schedule-table');
     if(!table) return;
-    const letters = shuttleLetters(getShuttleCount());
     let html = '';
     SESSIONS.forEach(s=>{
+      const tripCount = tripShuttleCounts[s.id] || shuttleCount;
+      const letters = shuttleLettersFor(s.id);
       html += `<div class="attendee-row" style="flex-wrap:wrap;">
-        <div style="flex-basis:100%; margin-bottom:6px;"><strong style="font-size:13px;">${s.label}</strong></div>`;
+        <div style="flex-basis:100%; margin-bottom:6px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <strong style="font-size:13px;">${s.label}</strong>
+          <span class="attendee-meta">Shuttles running this trip:</span>
+          <input type="number" class="trip-shuttle-count-input" data-session="${s.id}" min="1" max="10" value="${tripCount}" style="margin-bottom:0; width:60px;">
+        </div>`;
       letters.forEach(l=>{
         const key = closedKey(s.id, l);
         const cfg = shuttleSchedule[key] || { time: '', capacity: 14 };
@@ -871,6 +905,19 @@ Alex Kim
       html += `</div>`;
     });
     table.innerHTML = html;
+    table.querySelectorAll('.trip-shuttle-count-input').forEach(input=>{
+      input.addEventListener('change', async ()=>{
+        const sessionId = input.dataset.session;
+        const n = Math.max(1, Math.min(10, parseInt(input.value, 10) || shuttleCount));
+        if(n === shuttleCount){
+          delete tripShuttleCounts[sessionId]; // matches the global default — no override needed
+        } else {
+          tripShuttleCounts[sessionId] = n;
+        }
+        await saveTripShuttleCounts();
+        renderShuttleScheduleTable();
+      });
+    });
     table.querySelectorAll('.sched-time-input, .sched-capacity-input').forEach(input=>{
       input.addEventListener('change', async ()=>{
         const key = input.dataset.key;
@@ -896,7 +943,7 @@ Alex Kim
       sel.onchange = renderReservationsTab;
     }
     const session = sel.value || SESSIONS[0].id;
-    const letters = shuttleLetters(getShuttleCount());
+    const letters = shuttleLettersFor(session);
     const body = el('reservations-body');
     if(!dataLoaded){ body.innerHTML = '<p class="muted">Loading…</p>'; return; }
 
@@ -1124,7 +1171,7 @@ Alex Kim
   function populateShuttleActive(){
     const sel = el('checkin-shuttle-active');
     const session = activeSession();
-    const letters = shuttleLetters(getShuttleCount());
+    const letters = session ? shuttleLettersFor(session) : shuttleLetters(getShuttleCount());
     const openLetters = session ? letters.filter(l => !isShuttleClosed(session, l)) : letters;
     const current = sel.value;
     sel.innerHTML = openLetters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
@@ -1565,7 +1612,7 @@ Alex Kim
       return;
     }
     const session = el('dashboard-session-select').value;
-    const letters = shuttleLetters(getShuttleCount());
+    const letters = shuttleLettersFor(session);
     const allClosed = isTripFullyClosed(session);
     const anyOpen = letters.some(l => !isShuttleClosed(session, l));
 

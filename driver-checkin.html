@@ -352,6 +352,7 @@
   let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
   let shuttleCount = 3; // synced from the admin app — kept in sync automatically, no local editing needed here
+  let tripShuttleCounts = {}; // {sessionId: count} — per-trip override, synced from admin app
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -370,7 +371,7 @@
   const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
   const closedKey = (sessionId, shuttle) => sessionId + '::' + shuttle;
   const isShuttleClosed = (sessionId, shuttle) => !!closedSessions[closedKey(sessionId, shuttle)];
-  const isTripFullyClosed = (sessionId) => shuttleLettersGlobal().every(l => isShuttleClosed(sessionId, l));
+  const isTripFullyClosed = (sessionId) => shuttleLettersFor(sessionId).every(l => isShuttleClosed(sessionId, l));
   function shuttleLettersGlobal(){ return shuttleLetters(getShuttleCount()); }
 
   const el = id => document.getElementById(id);
@@ -418,6 +419,11 @@
 
   function getShuttleCount(){
     return shuttleCount;
+  }
+
+  function shuttleLettersFor(sessionId){
+    const n = tripShuttleCounts[sessionId] || shuttleCount;
+    return shuttleLetters(n);
   }
 
   async function saveRoster(){
@@ -503,6 +509,7 @@
     reservations = (data && data.reservations) || {};
     reservationSubmitted = (data && data.reservationSubmitted) || {};
     shuttleCount = (data && data.shuttleCount) || 3;
+    tripShuttleCounts = (data && data.tripShuttleCounts) || {};
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
     if(activeTab === 'checkin'){ populateSessionSelects(); populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }
@@ -890,7 +897,7 @@
   function populateShuttleActive(){
     const sel = el('checkin-shuttle-active');
     const session = activeSession();
-    const letters = shuttleLetters(getShuttleCount());
+    const letters = session ? shuttleLettersFor(session) : shuttleLetters(getShuttleCount());
     const openLetters = session ? letters.filter(l => !isShuttleClosed(session, l)) : letters;
     const current = sel.value;
     sel.innerHTML = openLetters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
@@ -1331,7 +1338,7 @@
       return;
     }
     const session = el('dashboard-session-select').value;
-    const letters = shuttleLetters(getShuttleCount());
+    const letters = shuttleLettersFor(session);
     const allClosed = isTripFullyClosed(session);
     const anyOpen = letters.some(l => !isShuttleClosed(session, l));
 

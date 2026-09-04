@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>MP&L Shuttles Admin</title>
+<title>My Shuttle</title>
 
-<link rel="manifest" href="manifest-admin.json">
+<link rel="manifest" href="manifest-driver.json">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#0F1C33">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="MP&L Admin">
+<meta name="apple-mobile-web-app-title" content="My Shuttle">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
@@ -202,10 +202,10 @@
     border-radius: 6px; padding: 7px 12px; cursor: pointer; border: none;
   }
   .check-btn.pending{ background: var(--navy-panel-2); color: var(--paper); }
-  .check-btn.done{ background: var(--teal); color: var(--navy); }
   .check-btn.danger{ background: var(--red); color: var(--navy); }
   .check-btn.warn-btn{ background: var(--amber); color: var(--navy); }
   .check-btn:disabled{ opacity: 0.5; cursor: not-allowed; }
+  .check-btn.done{ background: var(--teal); color: var(--navy); }
 
   /* Dashboard */
   .flip-grid{
@@ -250,7 +250,6 @@
   }
   @media screen{
     #reservations-print-area{ display: none; }
-    #dashboard-print-area{ display: none; }
   }
 </style>
 </head>
@@ -261,110 +260,35 @@
   <div class="header">
     <div class="header-top">
       <div>
-        <p class="eyebrow">MP&L Shuttles · Live Manifest</p>
+        <p class="eyebrow">My Shuttle</p>
         <h1 id="event-title">MP&L Shuttles</h1>
       </div>
     </div>
     <div class="tabs">
-      <button class="tab" data-tab="setup">Setup</button>
-      <button class="tab" data-tab="passes">QR Codes</button>
       <button class="tab active" data-tab="checkin">Check-In</button>
       <button class="tab" data-tab="dashboard">Dashboard</button>
-      <button class="tab" data-tab="log">Log</button>
-      <button class="tab" data-tab="reservations">Reservations</button>
     </div>
   </div>
 
   <div class="panel">
 
-    <!-- SETUP TAB -->
-    <div id="tab-setup" class="tab-content hidden">
-      <div class="card">
-        <h2>1 · Build Passenger List</h2>
-        <p class="muted" style="margin-top:-6px;">Paste one attendee per line. Add the last 4 digits of their phone after a comma to enable reservation verification (optional — you can also fill it in per-row below later). Boarding is first come, first served — nobody is pre-assigned to a shuttle; drivers just log which shuttle each person actually gets on.</p>
-        <label for="names-input">Attendee names</label>
-        <textarea id="names-input" placeholder="Jane Doe, 4821
-Sam Patel, 7790
-Alex Kim
-..."></textarea>
-        <div class="row">
-          <div>
-            <label for="shuttle-count">Number of shuttles</label>
-            <input type="number" id="shuttle-count" min="1" max="10" value="3">
-          </div>
-          <button class="btn" id="build-roster-btn">Build List</button>
-          <button class="btn secondary" id="add-more-btn">Add Names to Existing List</button>
-        </div>
-        <p class="muted" id="setup-status"></p>
-      </div>
-
-      <div class="card" id="roster-preview-card" style="display:none;">
-        <div class="row" style="justify-content:space-between; align-items:center;">
-          <h2 style="margin:0;">2 · Passenger List</h2>
-          <button class="btn secondary" id="toggle-roster-list-btn" style="margin-bottom:0;">Minimize</button>
-        </div>
-        <p class="muted" style="margin-top:8px;">Everyone below gets one QR boarding pass. Which shuttle someone boards is handled entirely through the Reservations tab now — passengers pick it themselves on the reservation page. The phone field is optional contact info, not currently used for verification.</p>
-        <div id="roster-table"></div>
-      </div>
-
-      <div class="card">
-        <h2>3 · Drivers</h2>
-        <p class="muted" style="margin-top:-6px;">Add each driver and the shuttle they're assigned to. On the Check-In tab, drivers pick their own name and the shuttle fills in automatically. Reassign anyone here anytime — changes apply immediately everywhere.</p>
-        <div class="row">
-          <input type="text" id="driver-name-input" placeholder="Driver name" style="margin-bottom:0; flex:1; min-width:160px;">
-          <select id="driver-shuttle-input" style="margin-bottom:0; width:auto;"></select>
-          <button class="btn" id="add-driver-btn">Add Driver</button>
-        </div>
-        <div id="drivers-table" style="margin-top:10px;"></div>
-      </div>
-
-      <div class="card">
-        <div class="row" style="justify-content:space-between; align-items:center;">
-          <h2 style="margin:0;">4 · Shuttle Schedule &amp; Capacity</h2>
-          <button class="btn secondary" id="toggle-schedule-table-btn" style="margin-bottom:0;">Minimize</button>
-        </div>
-        <p class="muted" style="margin-top:8px;">Check which shuttles actually run each trip, then set a departure time and seat capacity for each one. Only shuttles checked here, with a time filled in, show up on the passenger reservation page.</p>
-        <div id="shuttle-schedule-table"></div>
-      </div>
-
-      <div class="card">
-        <h2>Clear Check-Ins</h2>
-        <p class="muted" style="margin-top:-6px;">Clears everyone's boarded status across all trips — useful while testing. Leaves the passenger list, drivers, shuttle schedule, and reservations untouched.</p>
-        <button class="btn danger" id="clear-checkins-btn">Clear All Check-Ins</button>
-      </div>
-
-      <div class="card">
-        <h2>Clear Reservations</h2>
-        <p class="muted" style="margin-top:-6px;">Clears everyone's reservations and unlocks the reservation page for all passengers again — useful while testing. Leaves the passenger list, drivers, shuttle schedule, and check-ins untouched.</p>
-        <button class="btn danger" id="clear-reservations-btn">Clear All Reservations</button>
-      </div>
-
-      <div class="card">
-        <h2>Reset</h2>
-        <p class="muted" style="margin-top:-6px;">Clears the passenger list, drivers, shuttle schedule, reservations, and all check-ins for everyone on this event. Use between events, not during one.</p>
-        <button class="btn danger" id="reset-btn">Reset Event Data</button>
-      </div>
-    </div>
-
-    <!-- PASSES TAB -->
-    <div id="tab-passes" class="tab-content hidden">
-      <div class="card">
-        <h2>Boarding passes</h2>
-        <p class="muted" style="margin-top:-6px;">One pass per attendee — the same code is valid for all trips. Drivers pick the correct trip from a dropdown before scanning, so this one code checks in independently each time. The code below the QR also works for manual entry.</p>
-        <button class="btn secondary" id="print-btn">Print All</button>
-      </div>
-      <div id="print-area" class="print-target">
-        <div class="pass-grid" id="pass-grid"></div>
-      </div>
-    </div>
-
     <!-- CHECKIN TAB -->
     <div id="tab-checkin" class="tab-content">
-      <div class="card">
+      <div class="card hidden" id="invalid-link-card">
+        <h2>Link Not Recognized</h2>
+        <p class="muted">This personal driver link isn't valid — it may have been mistyped, or your assignment was removed. Contact your event organizer for an updated link.</p>
+      </div>
+      <div class="card" id="checkin-header-card">
         <h2>This Driver is boarding</h2>
-        <p class="muted" style="margin-top:-6px;">Pick your name to auto-fill your assigned shuttle, then set the trip. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all trips.</p>
-        <div class="row">
+        <p class="muted" id="checkin-header-note" style="margin-top:-6px;">Pick your name to auto-fill your assigned shuttle, then set the trip. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all trips.</p>
+        <div class="row" id="driver-picker-row">
           <select id="checkin-driver-active" style="margin-bottom:0; width:auto;"><option value="">— Select Driver —</option></select>
+        </div>
+        <div class="row hidden" id="locked-driver-row">
+          <div class="flip-card" style="text-align:left; padding:12px 16px; flex:1;">
+            <div class="flip-label">Driver</div>
+            <div class="flip-value" style="font-size:20px;" id="locked-driver-name"></div>
+          </div>
         </div>
         <div class="row">
           <select id="checkin-session-active" style="margin-bottom:0; width:auto;"></select>
@@ -401,7 +325,6 @@ Alex Kim
         <div class="row">
           <select id="dashboard-session-select" style="margin-bottom:0; width:auto;"></select>
           <button class="btn secondary" id="toggle-close-trip-btn"></button>
-          <button class="btn secondary" id="print-boarded-manifest-btn">Print Boarded Manifest</button>
         </div>
         <p class="muted" id="trip-status-note" style="margin-top:8px;"></p>
       </div>
@@ -410,43 +333,6 @@ Alex Kim
         <h2>Not yet boarded on this trip</h2>
         <div id="missing-list" class="missing-list"></div>
       </div>
-      <div id="dashboard-print-area" class="print-target"></div>
-    </div>
-
-    <!-- LOG TAB -->
-    <div id="tab-log" class="tab-content hidden">
-      <div class="card">
-        <h2>Scan log</h2>
-        <p class="muted" style="margin-top:-6px;">Every check-in and undo, timestamped, newest first — a full audit trail per trip.</p>
-        <div class="row">
-          <select id="log-session-filter" style="margin-bottom:0; width:auto;"><option value="all">All Trips</option></select>
-          <input type="text" id="log-search" placeholder="Search by name..." style="margin-bottom:0; width:auto; flex:1; min-width:160px;">
-          <button class="btn danger" id="clear-log-btn">Clear Log</button>
-        </div>
-        <div id="log-list"></div>
-      </div>
-    </div>
-
-    <!-- RESERVATIONS TAB -->
-    <div id="tab-reservations" class="tab-content hidden">
-      <div class="card">
-        <h2>Passenger reservations</h2>
-        <p class="muted" style="margin-top:-6px;">Send passengers the reservation link (reserve.html) so they can pick a departure time themselves. This tab shows who reserved what — it's read-only except for clearing a reservation if someone needs to be freed up.</p>
-        <div class="row">
-          <select id="reservations-session-select" style="margin-bottom:0; width:auto;"></select>
-          <button class="btn secondary" id="print-manifest-btn">Print This Trip's Manifest</button>
-        </div>
-      </div>
-      <div class="card">
-        <h2>Reset a passenger</h2>
-        <p class="muted" style="margin-top:-6px;">Fully unlocks someone to start their reservation over from scratch — clears every trip they picked (or skipped) across all trips, not just this one. Use this if a test reservation needs redoing, or someone needs a completely fresh start.</p>
-        <div class="row">
-          <select id="reset-passenger-select" style="margin-bottom:0; flex:1; min-width:160px;"></select>
-          <button class="btn danger" id="reset-passenger-btn">Reset This Passenger</button>
-        </div>
-      </div>
-      <div id="reservations-body"></div>
-      <div id="reservations-print-area" class="print-target"></div>
     </div>
 
   </div>
@@ -475,8 +361,8 @@ Alex Kim
   let shuttleSchedule = {}; // {sessionId::shuttle: {time, capacity}} — departure config for reservations
   let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
-  let shuttleCount = 3; // synced across all devices now, not a local-only setting
-  let tripShuttleLetters = {}; // {sessionId: ['A','C','D']} — which specific shuttles run this trip; absent = all of them (up to shuttleCount)
+  let shuttleCount = 3; // synced from the admin app — kept in sync automatically, no local editing needed here
+  let tripShuttleLetters = {}; // {sessionId: ['A','C','D']} — which specific shuttles run this trip; synced from admin app
   let html5QrCode = null;
   let scanning = false;
   let dataLoaded = false;
@@ -499,6 +385,11 @@ Alex Kim
   function shuttleLettersGlobal(){ return shuttleLetters(getShuttleCount()); }
 
   const el = id => document.getElementById(id);
+
+  // ---- Personal driver link: reads ?driver=<id> from the URL and locks the whole page to that driver's shuttle ----
+  const urlParams = new URLSearchParams(window.location.search);
+  const lockedDriverId = urlParams.get('driver');
+  let driverLockApplied = false; // guards the one-time auto-select so it doesn't re-fire on every sync
 
   // ============================================================
   // FIREBASE SETUP — do this once before sharing the file:
@@ -547,16 +438,6 @@ Alex Kim
 
   function shuttleLettersFor(sessionId){
     return tripShuttleLetters[sessionId] || shuttleLetters(shuttleCount);
-  }
-
-  async function saveShuttleCount(){
-    if(!isConfigured) return;
-    try{ await eventDocRef.set({ shuttleCount }, { merge: true }); }
-    catch(e){ console.error('Failed to save shuttle count', e); }
-  }
-
-  async function saveTripShuttleLetters(){
-    await saveMapField('tripShuttleLetters', tripShuttleLetters);
   }
 
   async function saveRoster(){
@@ -632,6 +513,44 @@ Alex Kim
     }catch(e){ console.error('Failed to save log entry', e); }
   }
 
+  function applyDriverLock(){
+    if(!lockedDriverId){
+      el('invalid-link-card').classList.remove('hidden');
+      el('checkin-header-card').classList.add('hidden');
+      return;
+    }
+    const driver = drivers.find(d=>d.id===lockedDriverId);
+    if(!driver){
+      el('invalid-link-card').classList.remove('hidden');
+      el('checkin-header-card').classList.add('hidden');
+      return;
+    }
+    el('invalid-link-card').classList.add('hidden');
+    el('checkin-header-card').classList.remove('hidden');
+    el('driver-picker-row').classList.add('hidden');
+    el('locked-driver-row').classList.remove('hidden');
+    el('locked-driver-name').textContent = driver.name + ' · Shuttle ' + driver.shuttle;
+    el('checkin-header-note').textContent = 'You\u2019re locked in as this driver on Shuttle ' + driver.shuttle + ' — just pick which trip you\u2019re running below.';
+    el('checkin-shuttle-active').style.display = 'none'; // fixed to their shuttle — nothing to pick
+
+    if(!driverLockApplied){
+      driverLockApplied = true;
+      populateDriverSelect();
+      const sel = el('checkin-driver-active');
+      // Guarantee this driver's option exists even if populateDriverSelect's normal filtering
+      // (which hides drivers whose shuttle is closed for the currently-selected trip) would
+      // otherwise have left them out — a locked link must always be able to select itself.
+      if(!Array.from(sel.options).some(o=>o.value===driver.id)){
+        const opt = document.createElement('option');
+        opt.value = driver.id;
+        opt.textContent = driver.name + ' (Shuttle ' + driver.shuttle + ')';
+        sel.appendChild(opt);
+      }
+      sel.value = driver.id;
+      sel.dispatchEvent(new Event('change')); // reuses the existing auto-fill-shuttle + auto-check-in logic
+    }
+  }
+
   function onRemoteUpdate(data){
     roster = (data && data.roster) || [];
     checkins = (data && data.checkins) || {};
@@ -643,17 +562,11 @@ Alex Kim
     reservationSubmitted = (data && data.reservationSubmitted) || {};
     shuttleCount = (data && data.shuttleCount) || 3;
     tripShuttleLetters = (data && data.tripShuttleLetters) || {};
-    el('shuttle-count').value = shuttleCount;
     dataLoaded = true;
+    applyDriverLock();
     const activeTab = document.querySelector('.tab.active').dataset.tab;
-    renderRosterPreview();
-    renderDriversPreview();
-    renderShuttleScheduleTable();
-    if(activeTab === 'passes') renderPasses();
     if(activeTab === 'checkin'){ populateSessionSelects(); populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }
     if(activeTab === 'dashboard') renderDashboard();
-    if(activeTab === 'log') renderLog();
-    if(activeTab === 'reservations') renderReservationsTab();
   }
 
   // ---- Tabs ----
@@ -663,11 +576,8 @@ Alex Kim
       document.querySelectorAll('.tab-content').forEach(c=>c.classList.add('hidden'));
       btn.classList.add('active');
       el('tab-'+btn.dataset.tab).classList.remove('hidden');
-      if(btn.dataset.tab === 'passes') renderPasses();
-      if(btn.dataset.tab === 'checkin'){ renderCheckin(); renderLiveCounter(); }
+      if(btn.dataset.tab === 'checkin'){ applyDriverLock(); renderCheckin(); renderLiveCounter(); }
       if(btn.dataset.tab === 'dashboard') renderDashboard();
-      if(btn.dataset.tab === 'log') renderLog();
-      if(btn.dataset.tab === 'reservations') renderReservationsTab();
     });
   });
 
@@ -679,72 +589,6 @@ Alex Kim
     const phone = phoneRaw.slice(-4);
     return { name, phone };
   }
-
-  el('build-roster-btn').addEventListener('click', async ()=>{
-    const lines = el('names-input').value.split('\n').map(s=>s.trim()).filter(Boolean);
-    if(lines.length === 0){ el('setup-status').textContent = 'Add at least one name first.'; return; }
-    const shuttleN = getShuttleCount();
-    const existingIds = new Set(roster.map(r=>r.id));
-    roster = lines.map((line)=>{
-      const { name, phone } = parseNameLine(line);
-      let id = genId();
-      while(existingIds.has(id)){ id = genId(); }
-      existingIds.add(id);
-      return { id, name, phone };
-    });
-    checkins = {};
-    await saveRoster();
-    await saveCheckins();
-    el('setup-status').textContent = `Roster built: ${roster.length} attendees. Tracking ${shuttleN} shuttle(s) — first come, first served.`;
-    renderRosterPreview();
-  });
-
-  el('toggle-roster-list-btn').addEventListener('click', ()=>{
-    const table = el('roster-table');
-    const collapsed = table.style.display === 'none';
-    table.style.display = collapsed ? 'block' : 'none';
-    el('toggle-roster-list-btn').textContent = collapsed ? 'Minimize' : 'Expand';
-  });
-
-  el('toggle-schedule-table-btn').addEventListener('click', ()=>{
-    const table = el('shuttle-schedule-table');
-    const collapsed = table.style.display === 'none';
-    table.style.display = collapsed ? 'block' : 'none';
-    el('toggle-schedule-table-btn').textContent = collapsed ? 'Minimize' : 'Expand';
-  });
-
-  el('add-more-btn').addEventListener('click', async ()=>{
-    const lines = el('names-input').value.split('\n').map(s=>s.trim()).filter(Boolean);
-    if(lines.length === 0){ el('setup-status').textContent = 'Add at least one name first.'; return; }
-    const existingIds = new Set(roster.map(r=>r.id));
-    lines.forEach(line=>{
-      const { name, phone } = parseNameLine(line);
-      let id = genId();
-      while(existingIds.has(id)){ id = genId(); }
-      existingIds.add(id);
-      roster.push({ id, name, phone });
-    });
-    await saveRoster();
-    el('setup-status').textContent = `Added ${lines.length}. Roster now has ${roster.length} attendees.`;
-    el('names-input').value = '';
-    renderRosterPreview();
-  });
-
-  el('shuttle-count').addEventListener('change', async ()=>{
-    const n = Math.max(1, Math.min(10, parseInt(el('shuttle-count').value || '3', 10)));
-    shuttleCount = n;
-    el('shuttle-count').value = n;
-    await saveShuttleCount();
-    el('setup-status').textContent = `Now tracking ${n} shuttle(s) — synced to every device.`;
-    renderRosterPreview();
-    renderDriversPreview();
-    renderShuttleScheduleTable();
-    populateShuttleActive();
-    populateDriverSelect();
-    renderCheckinList();
-    renderLiveCounter();
-    renderDashboard();
-  });
 
   function renderRosterPreview(){
     if(roster.length === 0){ el('roster-preview-card').style.display = 'none'; return; }
@@ -787,57 +631,6 @@ Alex Kim
     });
   }
 
-  el('clear-checkins-btn').addEventListener('click', async ()=>{
-    if(!confirm('Clear boarded status for everyone, across all trips? The passenger list, drivers, shuttle schedule, and reservations stay untouched. Cannot be undone.')) return;
-    checkins = {};
-    lastScan = null;
-    await saveCheckins();
-    el('setup-status').textContent = 'All check-ins cleared.';
-    renderCheckin();
-    renderDashboard();
-  });
-
-  el('clear-reservations-btn').addEventListener('click', async ()=>{
-    if(!confirm('Clear everyone\'s reservations and unlock the reservation page for all passengers again? The passenger list, drivers, shuttle schedule, and check-ins stay untouched. Cannot be undone.')) return;
-    reservations = {};
-    reservationSubmitted = {};
-    await saveMapField('reservations', reservations);
-    await saveMapField('reservationSubmitted', reservationSubmitted);
-    el('setup-status').textContent = 'All reservations cleared.';
-    renderReservationsTab();
-    renderCheckinList();
-    renderLiveCounter();
-  });
-
-  el('reset-btn').addEventListener('click', async ()=>{
-    if(!confirm('This clears the passenger list, drivers, shuttle schedule, reservations, all check-ins, trip open/closed status, and the scan log for everyone viewing this event. Continue?')) return;
-    roster = [];
-    checkins = {};
-    logs = [];
-    closedSessions = {};
-    drivers = [];
-    shuttleSchedule = {};
-    reservations = {};
-    reservationSubmitted = {};
-    tripShuttleLetters = {};
-    lastScan = null;
-    await saveRoster();
-    await saveCheckins();
-    await saveClosedSessions();
-    await saveDrivers();
-    await saveShuttleSchedule();
-    await saveMapField('reservations', reservations);
-    await saveMapField('reservationSubmitted', reservationSubmitted);
-    await saveTripShuttleLetters();
-    if(isConfigured){
-      try{ await eventDocRef.update({ logs: [] }); }
-      catch(e){ console.error('Failed to clear log', e); }
-    }
-    el('roster-preview-card').style.display = 'none';
-    el('setup-status').textContent = 'Event data reset.';
-    renderPasses(); renderCheckin(); renderDashboard(); renderLog(); renderShuttleScheduleTable(); renderReservationsTab();
-  });
-
   function escapeHtml(s){
     return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
@@ -851,18 +644,7 @@ Alex Kim
     if(letters.includes(current)) sel.value = current;
   }
 
-  el('add-driver-btn').addEventListener('click', async ()=>{
-    populateDriverShuttleInput();
-    const name = el('driver-name-input').value.trim();
-    if(!name){ el('setup-status').textContent = 'Enter a driver name first.'; return; }
-    const shuttle = el('driver-shuttle-input').value;
-    drivers.push({ id: genId(), name, shuttle });
-    await saveDrivers();
-    el('driver-name-input').value = '';
-    renderDriversPreview();
-    populateDriverSelect();
-    el('setup-status').textContent = `Added driver ${name} on Shuttle ${shuttle}.`;
-  });
+
 
   function renderDriversPreview(){
     populateDriverShuttleInput();
@@ -873,7 +655,6 @@ Alex Kim
     table.innerHTML = drivers.map(d=>`<div class="attendee-row">
       <input type="text" data-id="${d.id}" class="driver-name-edit" value="${escapeHtml(d.name)}" style="margin-bottom:0; flex:1; min-width:120px;">
       <select data-id="${d.id}" class="driver-shuttle-edit" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
-      <button class="btn secondary driver-copy-link-btn" data-id="${d.id}" style="margin-left:8px;">Copy Link</button>
       <button class="btn danger driver-remove-btn" data-id="${d.id}" style="margin-left:8px;">Remove</button>
     </div>`).join('');
     table.querySelectorAll('.driver-shuttle-edit').forEach(sel=>{
@@ -890,22 +671,6 @@ Alex Kim
         if(dd && input.value.trim()){ dd.name = input.value.trim(); await saveDrivers(); populateDriverSelect(); }
       });
     });
-    table.querySelectorAll('.driver-copy-link-btn').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{
-        const d = drivers.find(x=>x.id===btn.dataset.id);
-        if(!d) return;
-        const base = window.location.href.replace(/[^/]*$/, ''); // this page's URL minus its own filename
-        const link = base + 'my-shuttle.html?driver=' + d.id;
-        try{
-          await navigator.clipboard.writeText(link);
-          const original = btn.textContent;
-          btn.textContent = 'Copied!';
-          setTimeout(()=>{ btn.textContent = original; }, 1500);
-        }catch(e){
-          prompt(`Copy ${d.name}'s link manually:`, link);
-        }
-      });
-    });
     table.querySelectorAll('.driver-remove-btn').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         drivers = drivers.filter(x=>x.id!==btn.dataset.id);
@@ -919,21 +684,12 @@ Alex Kim
   function renderShuttleScheduleTable(){
     const table = el('shuttle-schedule-table');
     if(!table) return;
-    const allLetters = shuttleLetters(shuttleCount);
+    const letters = shuttleLetters(getShuttleCount());
     let html = '';
     SESSIONS.forEach(s=>{
-      const activeLetters = new Set(shuttleLettersFor(s.id));
       html += `<div class="attendee-row" style="flex-wrap:wrap;">
-        <div style="flex-basis:100%; margin-bottom:8px;"><strong style="font-size:13px;">${s.label}</strong></div>
-        <div style="flex-basis:100%; margin-bottom:10px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-          <span class="attendee-meta">Shuttles running this trip:</span>
-          ${allLetters.map(l=>`
-            <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer;">
-              <input type="checkbox" class="trip-shuttle-toggle" data-session="${s.id}" data-letter="${l}" ${activeLetters.has(l) ? 'checked' : ''} style="width:auto; margin:0;">
-              Shuttle ${l}
-            </label>`).join('')}
-        </div>`;
-      allLetters.filter(l=>activeLetters.has(l)).forEach(l=>{
+        <div style="flex-basis:100%; margin-bottom:6px;"><strong style="font-size:13px;">${s.label}</strong></div>`;
+      letters.forEach(l=>{
         const key = closedKey(s.id, l);
         const cfg = shuttleSchedule[key] || { time: '', capacity: 14 };
         html += `
@@ -947,31 +703,6 @@ Alex Kim
       html += `</div>`;
     });
     table.innerHTML = html;
-    table.querySelectorAll('.trip-shuttle-toggle').forEach(cb=>{
-      cb.addEventListener('change', async ()=>{
-        const sessionId = cb.dataset.session;
-        const letter = cb.dataset.letter;
-        const current = new Set(shuttleLettersFor(sessionId));
-        if(cb.checked){ current.add(letter); } else { current.delete(letter); }
-        // Store as an override only if it actually differs from "all shuttles" (the default) —
-        // keeps the data tidy and matches how the count-based version behaved before.
-        const allSet = new Set(allLetters);
-        const isDefault = current.size === allSet.size && [...current].every(l=>allSet.has(l));
-        if(isDefault){
-          delete tripShuttleLetters[sessionId];
-        } else {
-          tripShuttleLetters[sessionId] = allLetters.filter(l=>current.has(l)); // keep A-Z order regardless of click order
-        }
-        // Clean up any schedule entry for a shuttle just excluded — otherwise it could keep
-        // quietly showing up on the reservation page even after being unchecked here.
-        if(!cb.checked){
-          const key = closedKey(sessionId, letter);
-          if(shuttleSchedule[key]){ delete shuttleSchedule[key]; await saveShuttleSchedule(); }
-        }
-        await saveTripShuttleLetters();
-        renderShuttleScheduleTable();
-      });
-    });
     table.querySelectorAll('.sched-time-input, .sched-capacity-input').forEach(input=>{
       input.addEventListener('change', async ()=>{
         const key = input.dataset.key;
@@ -997,7 +728,7 @@ Alex Kim
       sel.onchange = renderReservationsTab;
     }
     const session = sel.value || SESSIONS[0].id;
-    const letters = shuttleLettersFor(session);
+    const letters = shuttleLetters(getShuttleCount());
     const body = el('reservations-body');
     if(!dataLoaded){ body.innerHTML = '<p class="muted">Loading…</p>'; return; }
 
@@ -1029,12 +760,7 @@ Alex Kim
         const cfg = shuttleSchedule[closedKey(session, l)];
         const names = roster.filter(r => reservations[checkinKey(session, r.id)] === l)
           .map(r=>r.name).sort((a,b)=>a.localeCompare(b));
-        const shuttleDrivers = drivers.filter(d => d.shuttle === l).map(d=>d.name);
-        const driverLine = shuttleDrivers.length > 0
-          ? `<p style="margin:2px 0 8px 0; font-weight:600;">Driver: ${escapeHtml(shuttleDrivers.join(', '))}</p>`
-          : `<p style="margin:2px 0 8px 0; color:#a00;">Driver: not yet assigned</p>`;
-        printHtml += `<h3 style="margin:18px 0 2px 0; border-bottom:2px solid #000; padding-bottom:4px;">Shuttle ${l} — ${escapeHtml(cfg.time)} (${names.length} / ${cfg.capacity} passenger seats · ${cfg.capacity + 1} total incl. driver)</h3>`;
-        printHtml += driverLine;
+        printHtml += `<h3 style="margin:18px 0 6px 0; border-bottom:2px solid #000; padding-bottom:4px;">Shuttle ${l} — ${escapeHtml(cfg.time)} (${names.length} / ${cfg.capacity})</h3>`;
         if(names.length === 0){
           printHtml += '<p style="color:#777;">No reservations yet.</p>';
         } else {
@@ -1147,9 +873,17 @@ Alex Kim
     const sel = el('checkin-driver-active');
     const current = sel.value;
     const session = activeSession();
-    const available = session ? drivers.filter(d => !isShuttleClosed(session, d.shuttle)) : drivers;
+    let available = session ? drivers.filter(d => !isShuttleClosed(session, d.shuttle)) : drivers;
+    // A locked personal-driver link must always be able to select itself, even if its shuttle
+    // happens to be closed for whichever trip is currently selected.
+    if(lockedDriverId && !available.some(d=>d.id===lockedDriverId)){
+      const lockedDriver = drivers.find(d=>d.id===lockedDriverId);
+      if(lockedDriver) available = available.concat([lockedDriver]);
+    }
     sel.innerHTML = '<option value="">— Select Driver —</option>' + available.map(d=>`<option value="${d.id}">${escapeHtml(d.name)} (Shuttle ${d.shuttle})</option>`).join('');
-    if(available.some(d=>d.id===current)){
+    if(lockedDriverId){
+      sel.value = lockedDriverId; // always re-assert the lock, regardless of what else changed
+    } else if(available.some(d=>d.id===current)){
       sel.value = current;
     } else if(current){
       // The previously selected driver just closed out (or their shuttle closed) — clear the selection
@@ -1219,7 +953,6 @@ Alex Kim
     });
   }
 
-  el('print-btn').addEventListener('click', ()=> window.print());
 
   // ---- Check-in ----
   function populateShuttleActive(){
@@ -1666,16 +1399,20 @@ Alex Kim
       return;
     }
     const session = el('dashboard-session-select').value;
-    const letters = shuttleLettersFor(session);
-    const allClosed = isTripFullyClosed(session);
+    const lockedDriver = lockedDriverId ? drivers.find(d=>d.id===lockedDriverId) : null;
+    const letters = lockedDriver ? [lockedDriver.shuttle] : shuttleLettersFor(session);
+    const allClosed = lockedDriver ? isShuttleClosed(session, lockedDriver.shuttle) : isTripFullyClosed(session);
     const anyOpen = letters.some(l => !isShuttleClosed(session, l));
 
-    // Bulk convenience toggle: close/reopen every shuttle for this trip at once.
+    // Bulk convenience toggle: close/reopen every shuttle for this trip at once
+    // (or just their own shuttle, when locked to a single driver's link).
     const closeBtn = el('toggle-close-trip-btn');
     closeBtn.style.display = 'inline-block';
-    closeBtn.textContent = allClosed ? 'Reopen All Shuttles' : 'Close All Shuttles for This Trip';
+    closeBtn.textContent = lockedDriver
+      ? (allClosed ? 'Reopen My Shuttle for This Trip' : 'Close My Shuttle for This Trip')
+      : (allClosed ? 'Reopen All Shuttles' : 'Close All Shuttles for This Trip');
     closeBtn.onclick = async ()=>{
-      const wasClosingAll = !allClosed; // capture intent before mutating state
+      const wasReallyFullyClosedBefore = isTripFullyClosed(session); // whole-trip check, regardless of lock scope
       letters.forEach(l=>{
         if(allClosed){ delete closedSessions[closedKey(session, l)]; }
         else { closedSessions[closedKey(session, l)] = true; }
@@ -1686,40 +1423,15 @@ Alex Kim
       populateDriverSelect();
       renderCheckinList();
       renderLiveCounter();
-      if(wasClosingAll){
+      if(!wasReallyFullyClosedBefore && isTripFullyClosed(session)){
         showTripReviewModal(session);
       }
     };
-    el('trip-status-note').textContent = allClosed
-      ? 'Every shuttle is closed for this trip — it no longer appears in the driver\u2019s trip picker.'
-      : (anyOpen ? 'Tap a shuttle below to close or reopen it individually for this trip.' : '');
-
-    el('print-boarded-manifest-btn').onclick = ()=>{
-      let printHtml = `<h2 style="margin-bottom:4px;">${escapeHtml(sessionLabel(session))} — Boarded Manifest</h2>
-        <p style="font-family:var(--mono); font-size:12px; color:#555; margin-top:0; margin-bottom:20px;">Printed ${new Date().toLocaleString()}</p>`;
-      letters.forEach(l=>{
-        const cfg = shuttleSchedule[closedKey(session, l)];
-        const boarded = roster.filter(r=>{
-          const c = checkins[checkinKey(session, r.id)];
-          return c && c.shuttle === l;
-        }).map(r=>({ name: r.name, time: checkins[checkinKey(session, r.id)].time }))
-          .sort((a,b)=>a.name.localeCompare(b.name));
-        const shuttleDrivers = drivers.filter(d => d.shuttle === l).map(d=>d.name);
-        const driverLine = shuttleDrivers.length > 0
-          ? `<p style="margin:2px 0 8px 0; font-weight:600;">Driver: ${escapeHtml(shuttleDrivers.join(', '))}</p>`
-          : `<p style="margin:2px 0 8px 0; color:#a00;">Driver: not yet assigned</p>`;
-        const capNote = cfg ? ` (${boarded.length} / ${cfg.capacity} passenger seats · ${cfg.capacity + 1} total incl. driver)` : ` (${boarded.length} boarded)`;
-        printHtml += `<h3 style="margin:18px 0 2px 0; border-bottom:2px solid #000; padding-bottom:4px;">Shuttle ${l}${capNote}</h3>`;
-        printHtml += driverLine;
-        if(boarded.length === 0){
-          printHtml += '<p style="color:#777;">Nobody boarded this shuttle for this trip.</p>';
-        } else {
-          printHtml += '<ol style="margin:0; padding-left:20px;">' + boarded.map(b=>`<li style="padding:3px 0;">${escapeHtml(b.name)} <span style="color:#777; font-family:monospace; font-size:11px;">· ${new Date(b.time).toLocaleTimeString()}</span></li>`).join('') + '</ol>';
-        }
-      });
-      el('dashboard-print-area').innerHTML = printHtml;
-      window.print();
-    };
+    el('trip-status-note').textContent = lockedDriver
+      ? (allClosed ? 'Your shuttle is closed for this trip — it no longer appears in your trip picker on Check-In.' : '')
+      : (allClosed
+          ? 'Every shuttle is closed for this trip — it no longer appears in the driver\u2019s trip picker.'
+          : (anyOpen ? 'Tap a shuttle below to close or reopen it individually for this trip.' : ''));
 
     const grid = el('flip-grid');
     let html = '';
@@ -1782,18 +1494,7 @@ Alex Kim
     }
   }
 
-  el('log-session-filter').addEventListener('change', renderLog);
-  el('log-search').addEventListener('input', renderLog);
 
-  el('clear-log-btn').addEventListener('click', async ()=>{
-    if(!confirm('Clear the entire scan log? This only clears the log itself — the passenger list, check-ins, drivers, and reservations are untouched. Cannot be undone.')) return;
-    logs = [];
-    if(isConfigured){
-      try{ await eventDocRef.set({ logs: [] }, { merge: true }); }
-      catch(e){ console.error('Failed to clear log', e); }
-    }
-    renderLog();
-  });
 
   function renderLog(){
     populateLogFilter();
@@ -1830,12 +1531,8 @@ Alex Kim
       err => { console.error('Firestore sync error', err); document.getElementById('config-banner').classList.remove('hidden'); }
     );
   } else {
-    renderRosterPreview();
-    renderDriversPreview();
-    renderShuttleScheduleTable();
     renderCheckin();
     renderDashboard();
-    renderReservationsTab();
   }
 })();
 </script>

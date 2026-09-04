@@ -281,7 +281,7 @@
     <div id="tab-setup" class="tab-content hidden">
       <div class="card">
         <h2>1 · Build Passenger List</h2>
-        <p class="muted" style="margin-top:-6px;">Paste one attendee per line. Add the last 4 digits of their phone after a comma to enable reservation verification (optional — you can also fill it in per-row below later). Boarding is first come, first served — nobody is pre-assigned to a shuttle; drivers just log which shuttle each person actually gets on.</p>
+        <p class="muted" style="margin-top:-6px;">Paste one attendee per line. Add the last 4 digits of their phone after a comma to enable reservation verification (optional — you can also fill it in per-row below later). Boarding is first come, first served.</p>
         <label for="names-input">Attendee names</label>
         <textarea id="names-input" placeholder="Jane Doe, 4821
 Sam Patel, 7790
@@ -1337,7 +1337,7 @@ Alex Kim
         <div class="pass-top">
           <div class="pass-eyebrow">Boarding Pass</div>
           <div class="pass-name">${escapeHtml(r.name)}</div>
-          <div class="pass-shuttle">Valid for all trips · first come, first served</div>
+          <div class="pass-shuttle">Valid for all trips per your reservation.</div>
         </div>
         <div class="pass-bottom">
           <div class="qr" id="${domId}"></div>

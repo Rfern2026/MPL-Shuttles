@@ -264,6 +264,7 @@
         <h1 id="event-title">MP&L Shuttles</h1>
       </div>
     </div>
+    <p class="muted hidden" id="persistent-driver-banner" style="margin: 0 0 10px 0; font-family:var(--mono); font-size:12px; color:var(--amber);"></p>
     <div class="tabs">
       <button class="tab active" data-tab="checkin">Check-In</button>
       <button class="tab" data-tab="dashboard">Dashboard</button>
@@ -361,6 +362,7 @@
   let shuttleSchedule = {}; // {sessionId::shuttle: {time, capacity}} — departure config for reservations
   let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
+  let driverTripLog = {}; // {sessionId::driverId: {time, shuttle, name}} — when each driver started each trip
   let shuttleCount = 3; // synced from the admin app — kept in sync automatically, no local editing needed here
   let tripShuttleLetters = {}; // {sessionId: ['A','C','D']} — which specific shuttles run this trip; synced from admin app
   let html5QrCode = null;
@@ -470,6 +472,18 @@
     await saveMapField('checkins', checkins);
   }
 
+  async function saveDriverTripLog(){
+    await saveMapField('driverTripLog', driverTripLog);
+  }
+
+  async function logDriverTripStartIfNeeded(sessionId, driverId, driverName, shuttle){
+    const key = sessionId + '::' + driverId;
+    if(driverTripLog[key]) return;
+    driverTripLog[key] = { time: Date.now(), shuttle, name: driverName };
+    appendLog({ logId: genId()+Date.now(), personId: driverId, name: driverName + ' (driver)', sessionId, shuttle, time: Date.now(), action: 'checkin', method: 'driver-start' });
+    await saveDriverTripLog();
+  }
+
   async function saveClosedSessions(){
     await saveMapField('closedSessions', closedSessions);
   }
@@ -532,6 +546,9 @@
     el('locked-driver-name').textContent = driver.name + ' · Shuttle ' + driver.shuttle;
     el('checkin-header-note').textContent = 'You\u2019re locked in as this driver on Shuttle ' + driver.shuttle + ' — just pick which trip you\u2019re running below.';
     el('checkin-shuttle-active').style.display = 'none'; // fixed to their shuttle — nothing to pick
+    const banner = el('persistent-driver-banner');
+    banner.textContent = driver.name.toUpperCase() + ' · SHUTTLE ' + driver.shuttle;
+    banner.classList.remove('hidden');
 
     if(!driverLockApplied){
       driverLockApplied = true;
@@ -562,10 +579,15 @@
     reservationSubmitted = (data && data.reservationSubmitted) || {};
     shuttleCount = (data && data.shuttleCount) || 3;
     tripShuttleLetters = (data && data.tripShuttleLetters) || {};
+    driverTripLog = (data && data.driverTripLog) || {};
     dataLoaded = true;
-    applyDriverLock();
+    // Populate the trip dropdown BEFORE locking the driver in — the driver-lock's auto-select
+    // needs a valid trip already in place, otherwise activeSession() reads empty on this first
+    // pass and the initial auto-check-in/trip-start log silently never fires.
     const activeTab = document.querySelector('.tab.active').dataset.tab;
-    if(activeTab === 'checkin'){ populateSessionSelects(); populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }
+    if(activeTab === 'checkin') populateSessionSelects();
+    applyDriverLock();
+    if(activeTab === 'checkin'){ populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }
     if(activeTab === 'dashboard') renderDashboard();
   }
 
@@ -918,7 +940,10 @@
       shuttleSel.value = d.shuttle;
       renderLiveCounter();
       const session = activeSession();
-      if(session) await autoCheckInDriverAsPassenger(d.name, session, d.shuttle);
+      if(session){
+        await autoCheckInDriverAsPassenger(d.name, session, d.shuttle);
+        await logDriverTripStartIfNeeded(session, d.id, d.name, d.shuttle);
+      }
     } else {
       showFlash(`${d.name}'s assigned Shuttle ${d.shuttle} is closed for this trip — pick a shuttle manually.`, 'warn');
     }
@@ -979,6 +1004,13 @@
     checkinSel.innerHTML = openSessions.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
     if(openSessions.some(s=>s.id===prev)){
       checkinSel.value = prev;
+    } else {
+      // First load (nothing selected yet) — restore whichever trip was last used on this device,
+      // so a driver reopening their link mid-event doesn't have to re-pick every time.
+      const remembered = localStorage.getItem('my_shuttle_last_session');
+      if(remembered && openSessions.some(s=>s.id===remembered)){
+        checkinSel.value = remembered;
+      }
     }
     populateShuttleActive();
   }
@@ -1010,6 +1042,8 @@
   el('checkin-search').addEventListener('input', renderCheckinList);
   el('show-boarded-toggle').addEventListener('change', renderCheckinList);
   el('checkin-session-active').addEventListener('change', async ()=>{
+    const newSession = el('checkin-session-active').value;
+    if(newSession) localStorage.setItem('my_shuttle_last_session', newSession);
     populateShuttleActive();
     populateDriverSelect();
     const driverId = el('checkin-driver-active').value;
@@ -1019,7 +1053,10 @@
       if(d && Array.from(shuttleSel.options).some(o=>o.value===d.shuttle)){
         shuttleSel.value = d.shuttle;
         const session = activeSession();
-        if(session) await autoCheckInDriverAsPassenger(d.name, session, d.shuttle);
+        if(session){
+          await autoCheckInDriverAsPassenger(d.name, session, d.shuttle);
+          await logDriverTripStartIfNeeded(session, d.id, d.name, d.shuttle);
+        }
       }
     }
     renderCheckinList();
@@ -1444,7 +1481,7 @@
       html += `<div class="flip-card">
         <div class="flip-label">Shuttle ${l}${closed ? ' · Closed' : ''}</div>
         <div class="flip-value">${boarded}</div>
-        <button class="btn secondary shuttle-toggle-btn" data-shuttle="${l}" style="margin-top:10px; font-size:11px; padding:8px 10px; width:100%;">${closed ? 'Reopen' : 'Close'}</button>
+        ${lockedDriver ? '' : `<button class="btn secondary shuttle-toggle-btn" data-shuttle="${l}" style="margin-top:10px; font-size:11px; padding:8px 10px; width:100%;">${closed ? 'Reopen' : 'Close'}</button>`}
       </div>`;
     });
     const totalAll = roster.length;

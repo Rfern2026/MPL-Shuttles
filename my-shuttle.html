@@ -363,6 +363,7 @@
   let reservations = {};    // {sessionId::personId: shuttle} — passenger self-service reservations
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
   let driverTripLog = {}; // {sessionId::driverId: {time, shuttle, name}} — when each driver started each trip
+  let driverSubs = {}; // {sessionId::shuttle: driverId} — per-trip override of who drives that shuttle (synced from admin)
   let shuttleCount = 3; // synced from the admin app — kept in sync automatically, no local editing needed here
   let tripShuttleLetters = {}; // {sessionId: ['A','C','D']} — which specific shuttles run this trip; synced from admin app
   let html5QrCode = null;
@@ -476,6 +477,18 @@
     await saveMapField('driverTripLog', driverTripLog);
   }
 
+  // Which shuttle a given driver is running on a given trip: a substitute assignment takes
+  // priority, and a driver who's been substituted OUT drives nothing that trip.
+  function shuttleForDriverOnTrip(sessionId, driverId){
+    const subEntry = Object.entries(driverSubs).find(([k,v]) => k.startsWith(sessionId+'::') && v===driverId);
+    if(subEntry) return subEntry[0].split('::')[1];
+    const driver = drivers.find(d=>d.id===driverId);
+    if(!driver) return null;
+    const replaced = driverSubs[closedKey(sessionId, driver.shuttle)];
+    if(replaced && replaced !== driverId) return null; // someone else is covering their shuttle this trip
+    return driver.shuttle;
+  }
+
   async function logDriverTripStartIfNeeded(sessionId, driverId, driverName, shuttle){
     const key = sessionId + '::' + driverId;
     if(driverTripLog[key]) return;
@@ -543,11 +556,22 @@
     el('checkin-header-card').classList.remove('hidden');
     el('driver-picker-row').classList.add('hidden');
     el('locked-driver-row').classList.remove('hidden');
-    el('locked-driver-name').textContent = driver.name + ' · Shuttle ' + driver.shuttle;
-    el('checkin-header-note').textContent = 'You\u2019re locked in as this driver on Shuttle ' + driver.shuttle + ' — just pick which trip you\u2019re running below.';
-    el('checkin-shuttle-active').style.display = 'none'; // fixed to their shuttle — nothing to pick
+    // Show the shuttle they're actually driving on the currently-selected trip — a substitution
+    // can put them on a different shuttle (or none) than their standing assignment.
+    const session = activeSession();
+    const effectiveShuttle = session ? shuttleForDriverOnTrip(session, driver.id) : driver.shuttle;
     const banner = el('persistent-driver-banner');
-    banner.textContent = driver.name.toUpperCase() + ' · SHUTTLE ' + driver.shuttle;
+    if(session && !effectiveShuttle){
+      el('locked-driver-name').textContent = driver.name + ' · not driving this trip';
+      el('checkin-header-note').textContent = 'You\u2019re not scheduled to drive this trip — a substitute is covering Shuttle ' + driver.shuttle + '. Pick another trip above.';
+      banner.textContent = driver.name.toUpperCase() + ' · NOT DRIVING THIS TRIP';
+    } else {
+      const shown = effectiveShuttle || driver.shuttle;
+      el('locked-driver-name').textContent = driver.name + ' · Shuttle ' + shown;
+      el('checkin-header-note').textContent = 'You\u2019re locked in as this driver on Shuttle ' + shown + ' — just pick which trip you\u2019re running below.';
+      banner.textContent = driver.name.toUpperCase() + ' · SHUTTLE ' + shown;
+    }
+    el('checkin-shuttle-active').style.display = 'none'; // fixed to their shuttle — nothing to pick
     banner.classList.remove('hidden');
 
     if(!driverLockApplied){
@@ -580,6 +604,7 @@
     shuttleCount = (data && data.shuttleCount) || 3;
     tripShuttleLetters = (data && data.tripShuttleLetters) || {};
     driverTripLog = (data && data.driverTripLog) || {};
+    driverSubs = (data && data.driverSubs) || {};
     dataLoaded = true;
     // Populate the trip dropdown BEFORE locking the driver in — the driver-lock's auto-select
     // needs a valid trip already in place, otherwise activeSession() reads empty on this first
@@ -895,17 +920,25 @@
     const sel = el('checkin-driver-active');
     const current = sel.value;
     const session = activeSession();
-    let available = session ? drivers.filter(d => !isShuttleClosed(session, d.shuttle)) : drivers;
+    // Substitute-aware: only drivers actually driving something on this trip, labelled with the
+    // shuttle they're really covering (which may differ from their standing assignment).
+    let available = session
+      ? drivers.map(d=>({ d, shuttle: shuttleForDriverOnTrip(session, d.id) }))
+              .filter(x => x.shuttle && !isShuttleClosed(session, x.shuttle))
+      : drivers.map(d=>({ d, shuttle: d.shuttle }));
     // A locked personal-driver link must always be able to select itself, even if its shuttle
     // happens to be closed for whichever trip is currently selected.
-    if(lockedDriverId && !available.some(d=>d.id===lockedDriverId)){
+    if(lockedDriverId && !available.some(x=>x.d.id===lockedDriverId)){
       const lockedDriver = drivers.find(d=>d.id===lockedDriverId);
-      if(lockedDriver) available = available.concat([lockedDriver]);
+      if(lockedDriver){
+        const lockedShuttle = session ? shuttleForDriverOnTrip(session, lockedDriver.id) : lockedDriver.shuttle;
+        if(lockedShuttle) available = available.concat([{ d: lockedDriver, shuttle: lockedShuttle }]);
+      }
     }
-    sel.innerHTML = '<option value="">— Select Driver —</option>' + available.map(d=>`<option value="${d.id}">${escapeHtml(d.name)} (Shuttle ${d.shuttle})</option>`).join('');
-    if(lockedDriverId){
+    sel.innerHTML = '<option value="">— Select Driver —</option>' + available.map(x=>`<option value="${x.d.id}">${escapeHtml(x.d.name)} (Shuttle ${x.shuttle})</option>`).join('');
+    if(lockedDriverId && available.some(x=>x.d.id===lockedDriverId)){
       sel.value = lockedDriverId; // always re-assert the lock, regardless of what else changed
-    } else if(available.some(d=>d.id===current)){
+    } else if(available.some(x=>x.d.id===current)){
       sel.value = current;
     } else if(current){
       // The previously selected driver just closed out (or their shuttle closed) — clear the selection
@@ -935,17 +968,23 @@
     if(!d) return;
     populateShuttleActive();
     const shuttleSel = el('checkin-shuttle-active');
-    const optionExists = Array.from(shuttleSel.options).some(o=>o.value===d.shuttle);
+    const session = activeSession();
+    // Use the substitute-aware shuttle for this specific trip, not the standing assignment.
+    const effectiveShuttle = session ? shuttleForDriverOnTrip(session, d.id) : d.shuttle;
+    if(session && !effectiveShuttle){
+      showFlash(`${d.name} isn't driving on this trip — a substitute is covering Shuttle ${d.shuttle}.`, 'warn');
+      return;
+    }
+    const optionExists = Array.from(shuttleSel.options).some(o=>o.value===effectiveShuttle);
     if(optionExists){
-      shuttleSel.value = d.shuttle;
+      shuttleSel.value = effectiveShuttle;
       renderLiveCounter();
-      const session = activeSession();
       if(session){
-        await autoCheckInDriverAsPassenger(d.name, session, d.shuttle);
-        await logDriverTripStartIfNeeded(session, d.id, d.name, d.shuttle);
+        await autoCheckInDriverAsPassenger(d.name, session, effectiveShuttle);
+        await logDriverTripStartIfNeeded(session, d.id, d.name, effectiveShuttle);
       }
     } else {
-      showFlash(`${d.name}'s assigned Shuttle ${d.shuttle} is closed for this trip — pick a shuttle manually.`, 'warn');
+      showFlash(`${d.name}'s Shuttle ${effectiveShuttle} is closed for this trip — pick a shuttle manually.`, 'warn');
     }
   });
 
@@ -1050,15 +1089,19 @@
     if(driverId){
       const d = drivers.find(x=>x.id===driverId);
       const shuttleSel = el('checkin-shuttle-active');
-      if(d && Array.from(shuttleSel.options).some(o=>o.value===d.shuttle)){
-        shuttleSel.value = d.shuttle;
-        const session = activeSession();
+      const session = activeSession();
+      const effectiveShuttle = (d && session) ? shuttleForDriverOnTrip(session, d.id) : null;
+      if(d && effectiveShuttle && Array.from(shuttleSel.options).some(o=>o.value===effectiveShuttle)){
+        shuttleSel.value = effectiveShuttle;
         if(session){
-          await autoCheckInDriverAsPassenger(d.name, session, d.shuttle);
-          await logDriverTripStartIfNeeded(session, d.id, d.name, d.shuttle);
+          await autoCheckInDriverAsPassenger(d.name, session, effectiveShuttle);
+          await logDriverTripStartIfNeeded(session, d.id, d.name, effectiveShuttle);
         }
+      } else if(d && session && !effectiveShuttle){
+        showFlash(`${d.name} isn't driving on this trip — a substitute is covering Shuttle ${d.shuttle}.`, 'warn');
       }
     }
+    applyDriverLock(); // refresh the locked-driver banner for the newly selected trip
     renderCheckinList();
     renderLiveCounter();
   });

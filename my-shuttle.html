@@ -1036,11 +1036,20 @@
       dashSel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}${isTripFullyClosed(s.id) ? ' (closed)' : ''}</option>`).join('');
     }
 
-    // Check-in: a trip is only selectable while at least one shuttle is still open for it.
+    // Check-in: which trips this driver can still work.
+    // On a personal driver link, that means trips where THEIR shuttle is still open — a trip
+    // where they've closed out (or where a substitute covers for them) drops off their list
+    // even if other shuttles on that trip are still boarding.
     const checkinSel = el('checkin-session-active');
-    const openSessions = SESSIONS.filter(s => !isTripFullyClosed(s.id));
+    const openSessions = SESSIONS.filter(s => {
+      if(lockedDriverId){
+        const myShuttle = shuttleForDriverOnTrip(s.id, lockedDriverId);
+        return myShuttle && !isShuttleClosed(s.id, myShuttle);
+      }
+      return !isTripFullyClosed(s.id);
+    });
     const prev = checkinSel.value;
-    checkinSel.innerHTML = openSessions.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+    checkinSel.innerHTML = '<option value="">— Select Trip —</option>' + openSessions.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
     if(openSessions.some(s=>s.id===prev)){
       checkinSel.value = prev;
     } else {
@@ -1122,7 +1131,7 @@
       const seatsOpen = Math.max(0, cfg.capacity - onThisShuttle);
       const openColor = seatsOpen === 0 ? 'var(--red)' : (seatsOpen <= 3 ? 'var(--amber)' : 'var(--teal)');
       capacityLine = `<div style="font-family:var(--mono); font-size:12px; margin-top:6px; color:var(--ink-soft);">
-        Capacity ${cfg.capacity + 1} <span style="opacity:0.7;">(${cfg.capacity} passenger + driver)</span> · ${reservedCount} reserved · <span style="color:${openColor};">${seatsOpen} seat${seatsOpen===1?'':'s'} still open</span>
+        Capacity ${cfg.capacity} <span style="opacity:0.7;">(${Math.max(0, cfg.capacity - 1)} passenger + driver)</span> · ${reservedCount} reserved · <span style="color:${openColor};">${seatsOpen} seat${seatsOpen===1?'':'s'} still open</span>
       </div>`;
     }
     box.innerHTML = `<div class="flip-label">Shuttle ${shuttle} · ${sessionLabel(session)}</div>
@@ -1164,7 +1173,9 @@
       return;
     }
     if(!el('checkin-session-active').value){
-      el('checkin-list').innerHTML = '<p class="muted">All trips are currently marked done. Reopen a trip from the Dashboard tab if you need to check someone in.</p>';
+      el('checkin-list').innerHTML = lockedDriverId
+        ? '<p class="muted">You\u2019ve closed out of every trip you\u2019re driving \u2014 nothing left to board. Reopen one from the Dashboard tab if you need to check someone in.</p>'
+        : '<p class="muted">All trips are currently marked done. Reopen a trip from the Dashboard tab if you need to check someone in.</p>';
       return;
     }
     const q = el('checkin-search').value.trim().toLowerCase();

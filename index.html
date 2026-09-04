@@ -424,7 +424,8 @@
       const options = letters.map(l=>{
         const cfg = shuttleSchedule[closedKey(s.id, l)];
         const count = Object.entries(reservations).filter(([k,v]) => k.startsWith(s.id+'::') && v===l).length;
-        const seatsLeft = Math.max(0, cfg.capacity - count);
+        const passengerCapacity = Math.max(0, cfg.capacity - 1); // one seat is the driver's
+        const seatsLeft = Math.max(0, passengerCapacity - count);
         const isFull = seatsLeft <= 0 && current !== l;
         let seatsClass = '';
         if(seatsLeft === 0) seatsClass = 'full';
@@ -528,7 +529,7 @@
       if(!val || val === SKIP) continue;
       const cfg = shuttleSchedule[closedKey(s.id, val)];
       const count = Object.entries(reservations).filter(([k,v]) => k.startsWith(s.id+'::') && v===val).length;
-      if(cfg && count >= cfg.capacity){
+      if(cfg && count >= Math.max(0, cfg.capacity - 1)){ // one seat is the driver's
         showFlash(`Sorry — ${sessionLabel(s.id)}, Shuttle ${val} just filled up. Go back and pick another for that trip.`, 'warn');
         el('missing-confirm-card').classList.add('hidden');
         el('selection-flow').classList.remove('hidden');

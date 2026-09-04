@@ -332,7 +332,7 @@ Alex Kim
           <h2 style="margin:0;">4 · Shuttle Schedule &amp; Capacity</h2>
           <button class="btn secondary" id="toggle-schedule-table-btn" style="margin-bottom:0;">Expand</button>
         </div>
-        <p class="muted" style="margin-top:8px;">Check which shuttles actually run each trip, then set a departure time and seat capacity for each one. Only shuttles checked here, with a time filled in, show up on the passenger reservation page.</p>
+        <p class="muted" style="margin-top:8px;">Check which shuttles actually run each trip, then set a departure time and total seat capacity (including the driver's seat) for each one. A 15-seat van holds 14 passengers + driver, so enter 15. Only shuttles checked here, with a time filled in, show up on the passenger reservation page.</p>
         <div id="shuttle-schedule-table" style="display:none;"></div>
       </div>
 
@@ -1048,7 +1048,7 @@ Alex Kim
           <span class="attendee-meta" style="width:70px;">Shuttle ${l}</span>
           <input type="text" class="sched-time-input" data-key="${key}" placeholder="e.g. 7:00 AM" value="${escapeHtml(cfg.time || '')}" style="margin-bottom:0; width:120px;">
           <input type="number" class="sched-capacity-input" data-key="${key}" min="0" value="${cfg.capacity != null ? cfg.capacity : 14}" style="margin-bottom:0; width:70px;">
-          <span class="attendee-meta">seats</span>
+          <span class="attendee-meta">total seats (incl. driver)</span>
         </div>`;
       });
       html += `</div>`;
@@ -1141,7 +1141,7 @@ Alex Kim
         const driverLine = shuttleDrivers.length > 0
           ? `<p style="margin:2px 0 8px 0; font-weight:600;">Driver: ${escapeHtml(shuttleDrivers.join(', '))}</p>`
           : `<p style="margin:2px 0 8px 0; color:#a00;">Driver: not yet assigned</p>`;
-        printHtml += `<h3 style="margin:18px 0 2px 0; border-bottom:2px solid #000; padding-bottom:4px;">Shuttle ${l} — ${escapeHtml(cfg.time)} (${names.length} / ${cfg.capacity} passenger seats · ${cfg.capacity + 1} total incl. driver)</h3>`;
+        printHtml += `<h3 style="margin:18px 0 2px 0; border-bottom:2px solid #000; padding-bottom:4px;">Shuttle ${l} — ${escapeHtml(cfg.time)} (${names.length} reserved / ${Math.max(0, cfg.capacity - 1)} passenger seats · ${cfg.capacity} total incl. driver)</h3>`;
         printHtml += driverLine;
         if(names.length === 0){
           printHtml += '<p style="color:#777;">No reservations yet.</p>';
@@ -1365,7 +1365,7 @@ Alex Kim
     const checkinSel = el('checkin-session-active');
     const openSessions = SESSIONS.filter(s => !isTripFullyClosed(s.id));
     const prev = checkinSel.value;
-    checkinSel.innerHTML = openSessions.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+    checkinSel.innerHTML = '<option value="">— Select Trip —</option>' + openSessions.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
     if(openSessions.some(s=>s.id===prev)){
       checkinSel.value = prev;
     }
@@ -1438,7 +1438,7 @@ Alex Kim
       const seatsOpen = Math.max(0, cfg.capacity - onThisShuttle);
       const openColor = seatsOpen === 0 ? 'var(--red)' : (seatsOpen <= 3 ? 'var(--amber)' : 'var(--teal)');
       capacityLine = `<div style="font-family:var(--mono); font-size:12px; margin-top:6px; color:var(--ink-soft);">
-        Capacity ${cfg.capacity + 1} <span style="opacity:0.7;">(${cfg.capacity} passenger + driver)</span> · ${reservedCount} reserved · <span style="color:${openColor};">${seatsOpen} seat${seatsOpen===1?'':'s'} still open</span>
+        Capacity ${cfg.capacity} <span style="opacity:0.7;">(${Math.max(0, cfg.capacity - 1)} passenger + driver)</span> · ${reservedCount} reserved · <span style="color:${openColor};">${seatsOpen} seat${seatsOpen===1?'':'s'} still open</span>
       </div>`;
     }
     box.innerHTML = `<div class="flip-label">Shuttle ${shuttle} · ${sessionLabel(session)}</div>
@@ -1838,7 +1838,7 @@ Alex Kim
         const driverLine = shuttleDrivers.length > 0
           ? `<p style="margin:2px 0 8px 0; font-weight:600;">Driver: ${escapeHtml(shuttleDrivers.join(', '))}</p>`
           : `<p style="margin:2px 0 8px 0; color:#a00;">Driver: not yet assigned</p>`;
-        const capNote = cfg ? ` (${boarded.length} / ${cfg.capacity} passenger seats · ${cfg.capacity + 1} total incl. driver)` : ` (${boarded.length} boarded)`;
+        const capNote = cfg ? ` (${boarded.length} / ${cfg.capacity} boarded incl. driver)` : ` (${boarded.length} boarded)`;
         printHtml += `<h3 style="margin:18px 0 2px 0; border-bottom:2px solid #000; padding-bottom:4px;">Shuttle ${l}${capNote}</h3>`;
         printHtml += driverLine;
         if(boarded.length === 0){

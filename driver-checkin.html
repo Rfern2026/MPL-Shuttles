@@ -204,6 +204,7 @@
   .check-btn.pending{ background: var(--navy-panel-2); color: var(--paper); }
   .check-btn.danger{ background: var(--red); color: var(--navy); }
   .check-btn.warn-btn{ background: var(--amber); color: var(--navy); }
+  .check-btn:disabled{ opacity: 0.5; cursor: not-allowed; }
   .check-btn.done{ background: var(--teal); color: var(--navy); }
 
   /* Dashboard */
@@ -1042,16 +1043,16 @@
       }
       if(reservedShuttle === 'none' && !done) meta += ' · <span style="color:var(--ink-soft);">No shuttle reserved</span>';
       if(noReservationAtAll) meta += ' · <span style="color:var(--amber);">⚠ No reservation on file</span>';
-      const fullBlock = !done && !resMismatch && !noReservationAtAll && shuttleFullNow;
-      if(fullBlock) meta += ' · <span style="color:var(--red);">⚠ Shuttle full</span>';
-      const btnClass = done ? 'done' : (resMismatch ? 'danger' : (noReservationAtAll ? 'warn-btn' : (fullBlock ? 'danger' : 'pending')));
-      const btnLabel = done ? 'Undo' : (resMismatch ? 'Wrong Shuttle' : (noReservationAtAll ? 'No Reservation' : (fullBlock ? 'Shuttle Full' : 'Check In')));
+      const fullBlock = !done && shuttleFullNow;
+      if(fullBlock) meta += ' · <span style="color:var(--red);">⚠ Shuttle full — no more check-ins</span>';
+      const btnClass = done ? 'done' : (fullBlock ? 'danger' : (resMismatch ? 'danger' : (noReservationAtAll ? 'warn-btn' : 'pending')));
+      const btnLabel = done ? 'Undo' : (fullBlock ? 'Shuttle Full' : (resMismatch ? 'Wrong Shuttle' : (noReservationAtAll ? 'No Reservation' : 'Check In')));
       return `<div class="attendee-row">
         <div>
           <div class="attendee-name">${escapeHtml(r.name)}</div>
           <div class="attendee-meta">${meta}</div>
         </div>
-        <button class="check-btn ${btnClass}" data-id="${r.id}">${btnLabel}</button>
+        <button class="check-btn ${btnClass}" data-id="${r.id}" ${fullBlock ? 'disabled' : ''}>${btnLabel}</button>
       </div>`;
     }).join('');
     container.querySelectorAll('.check-btn').forEach(btn=>{
@@ -1098,8 +1099,8 @@
       }
       const seatsOpenNow = seatsOpenOn(session, shuttle);
       if(seatsOpenNow !== null && seatsOpenNow <= 0){
-        const ok = confirm(`Shuttle ${shuttle} shows FULL for this trip (0 seats open).\n\nCheck in ${name} anyway? This will exceed the configured capacity.`);
-        if(!ok) return;
+        alert(`Shuttle ${shuttle} is FULL for this trip (0 seats open). No further check-ins are allowed on this shuttle for this trip.`);
+        return;
       }
       checkins[key] = { time: Date.now(), shuttle };
       lastScan = { id, name: person ? person.name : id, session, shuttle };
@@ -1214,6 +1215,10 @@
       scanning = false;
       return;
     }
+    if(!el('checkin-driver-active').value){
+      showFlash('Select your name from the driver list above before scanning.', 'warn');
+      return;
+    }
     el('scan-box').classList.remove('hidden');
     el('scan-next-btn').style.display = 'none';
     let awaitingNext = false; // true while paused, waiting for the driver to tap "Scan Next"
@@ -1272,7 +1277,7 @@
           }
           const seatsOpenNow = seatsOpenOn(session, shuttle);
           if(seatsOpenNow !== null && seatsOpenNow <= 0){
-            showFlash('Shuttle ' + shuttle + ' shows FULL for this trip — ' + r.name + ' NOT checked in. Use the tap list below to override if you have room.', 'warn', true);
+            showFlash('Shuttle ' + shuttle + ' is FULL for this trip — ' + r.name + ' NOT checked in. No further check-ins are allowed on this shuttle for this trip.', 'warn', true);
             playWarnTone();
             if(navigator.vibrate) navigator.vibrate([80,60,80]);
             renderCheckinList();

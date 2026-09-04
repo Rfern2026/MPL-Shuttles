@@ -323,7 +323,7 @@ Alex Kim
           <h2 style="margin:0;">3b · Driver Substitutions</h2>
           <button class="btn secondary" id="toggle-subs-table-btn" style="margin-bottom:0;">Expand</button>
         </div>
-        <p class="muted" style="margin-top:8px;">Only needed for exceptions. Each shuttle normally uses its assigned driver from above — set a substitute here when someone else covers a specific trip. Leave everything on "(regular driver)" unless there's an actual swap.</p>
+        <p class="muted" style="margin-top:8px;">Only needed for exceptions. Each shuttle normally uses its assigned driver from above — set a substitute here when someone else covers a specific trip. Tip: add fill-in drivers with shuttle set to <strong>&ldquo;Substitute only&rdquo;</strong> so they appear on the trips you assign here and nowhere else. Leave everything on &ldquo;(regular driver)&rdquo; unless there's an actual swap.</p>
         <div id="driver-subs-table" style="display:none;"></div>
       </div>
 
@@ -586,7 +586,7 @@ Alex Kim
       const sub = drivers.find(d=>d.id===subId);
       if(sub) return sub;
     }
-    return drivers.find(d=>d.shuttle === shuttle) || null;
+    return drivers.find(d=>d.shuttle && d.shuttle === shuttle) || null;
   }
 
   // Which shuttle a given driver is running on a given trip: their substitute assignment
@@ -596,6 +596,9 @@ Alex Kim
     if(subEntry) return subEntry[0].split('::')[1];
     const driver = drivers.find(d=>d.id===driverId);
     if(!driver) return null;
+    // No standing assignment ("substitute only") — they drive nothing unless explicitly subbed in,
+    // which the check above already handled.
+    if(!driver.shuttle) return null;
     const replaced = driverSubs[closedKey(sessionId, driver.shuttle)];
     if(replaced && replaced !== driverId) return null; // someone else is covering their shuttle this trip
     return driver.shuttle;
@@ -914,8 +917,11 @@ Alex Kim
     const sel = el('driver-shuttle-input');
     const letters = shuttleLetters(getShuttleCount());
     const current = sel.value;
-    sel.innerHTML = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
-    if(letters.includes(current)) sel.value = current;
+    // "Substitute only" = no standing assignment; this driver appears ONLY on trips where
+    // they've been explicitly subbed in, instead of showing up on every trip.
+    sel.innerHTML = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('')
+      + '<option value="">Substitute only (no regular shuttle)</option>';
+    if(letters.includes(current) || current === '') sel.value = current;
   }
 
   el('add-driver-btn').addEventListener('click', async ()=>{
@@ -929,7 +935,9 @@ Alex Kim
     renderDriversPreview();
     renderDriverSubsTable();
     populateDriverSelect();
-    el('setup-status').textContent = `Added driver ${name} on Shuttle ${shuttle}.`;
+    el('setup-status').textContent = shuttle
+      ? `Added driver ${name} on Shuttle ${shuttle}.`
+      : `Added ${name} as a substitute-only driver — assign them to specific trips in section 3b.`;
   });
 
   function renderDriversPreview(){
@@ -937,7 +945,8 @@ Alex Kim
     const table = el('drivers-table');
     if(drivers.length === 0){ table.innerHTML = '<p class="muted">No drivers added yet.</p>'; return; }
     const letters = shuttleLetters(getShuttleCount());
-    const shuttleOptions = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
+    const shuttleOptions = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('')
+      + '<option value="">Substitute only</option>';
     table.innerHTML = drivers.map(d=>`<div class="attendee-row">
       <input type="text" data-id="${d.id}" class="driver-name-edit" value="${escapeHtml(d.name)}" style="margin-bottom:0; flex:1; min-width:120px;">
       <select data-id="${d.id}" class="driver-shuttle-edit" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
@@ -949,7 +958,7 @@ Alex Kim
       if(d) sel.value = d.shuttle;
       sel.addEventListener('change', async ()=>{
         const dd = drivers.find(x=>x.id===sel.dataset.id);
-        if(dd){ dd.shuttle = sel.value; await saveDrivers(); populateDriverSelect(); }
+        if(dd){ dd.shuttle = sel.value; await saveDrivers(); renderDriverSubsTable(); populateDriverSelect(); }
       });
     });
     table.querySelectorAll('.driver-name-edit').forEach(input=>{

@@ -468,6 +468,9 @@
     if(subEntry) return subEntry[0].split('::')[1];
     const driver = drivers.find(d=>d.id===driverId);
     if(!driver) return null;
+    // No standing assignment ("substitute only") — they drive nothing unless explicitly subbed in,
+    // which the check above already handled.
+    if(!driver.shuttle) return null;
     const replaced = driverSubs[closedKey(sessionId, driver.shuttle)];
     if(replaced && replaced !== driverId) return null; // someone else is covering their shuttle this trip
     return driver.shuttle;

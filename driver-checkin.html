@@ -357,14 +357,15 @@
   let dataLoaded = false;
 
   const SESSIONS = [
-    { id: 'd1-am', label: 'Day 1 · Morning' },
-    { id: 'd1-pm', label: 'Day 1 · Afternoon' },
-    { id: 'd1-eve-hub', label: 'Day 1 · Evening to HUB Stadium' },
-    { id: 'd1-eve-hotel', label: 'Day 1 · Evening to Hotel' },
-    { id: 'd2-am', label: 'Day 2 · Morning' },
-    { id: 'd2-pm', label: 'Day 2 · Afternoon' },
-    { id: 'd2-eve-dinner', label: 'Day 2 · Evening to Dinner' },
-    { id: 'd2-eve-hotel', label: 'Day 2 · Evening to Hotel' }
+    { id: 'mon-dinner', label: 'Mon 9/21 · Dinner' },
+    { id: 'd1-am', label: 'Tue 9/22 · Morning' },
+    { id: 'd1-pm', label: 'Tue 9/22 · Afternoon' },
+    { id: 'd1-eve-hub', label: 'Tue 9/22 · Eve → HUB' },
+    { id: 'd1-eve-hotel', label: 'Tue 9/22 · Eve → Hotel' },
+    { id: 'd2-am', label: 'Wed 9/23 · Morning' },
+    { id: 'd2-pm', label: 'Wed 9/23 · Afternoon' },
+    { id: 'd2-eve-dinner', label: 'Wed 9/23 · Eve → Dinner' },
+    { id: 'd2-eve-hotel', label: 'Wed 9/23 · Eve → Hotel' }
   ];
   const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
   const closedKey = (sessionId, shuttle) => sessionId + '::' + shuttle;

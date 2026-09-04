@@ -301,10 +301,10 @@ Alex Kim
       <div class="card" id="roster-preview-card" style="display:none;">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <h2 style="margin:0;">2 · Passenger List</h2>
-          <button class="btn secondary" id="toggle-roster-list-btn" style="margin-bottom:0;">Minimize</button>
+          <button class="btn secondary" id="toggle-roster-list-btn" style="margin-bottom:0;">Expand</button>
         </div>
         <p class="muted" style="margin-top:8px;">Everyone below gets one QR boarding pass. Which shuttle someone boards is handled entirely through the Reservations tab now — passengers pick it themselves on the reservation page. The phone field is optional contact info, not currently used for verification.</p>
-        <div id="roster-table"></div>
+        <div id="roster-table" style="display:none;"></div>
       </div>
 
       <div class="card">
@@ -321,19 +321,19 @@ Alex Kim
       <div class="card">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <h2 style="margin:0;">3b · Driver Substitutions</h2>
-          <button class="btn secondary" id="toggle-subs-table-btn" style="margin-bottom:0;">Minimize</button>
+          <button class="btn secondary" id="toggle-subs-table-btn" style="margin-bottom:0;">Expand</button>
         </div>
         <p class="muted" style="margin-top:8px;">Only needed for exceptions. Each shuttle normally uses its assigned driver from above — set a substitute here when someone else covers a specific trip. Leave everything on "(regular driver)" unless there's an actual swap.</p>
-        <div id="driver-subs-table"></div>
+        <div id="driver-subs-table" style="display:none;"></div>
       </div>
 
       <div class="card">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <h2 style="margin:0;">4 · Shuttle Schedule &amp; Capacity</h2>
-          <button class="btn secondary" id="toggle-schedule-table-btn" style="margin-bottom:0;">Minimize</button>
+          <button class="btn secondary" id="toggle-schedule-table-btn" style="margin-bottom:0;">Expand</button>
         </div>
         <p class="muted" style="margin-top:8px;">Check which shuttles actually run each trip, then set a departure time and seat capacity for each one. Only shuttles checked here, with a time filled in, show up on the passenger reservation page.</p>
-        <div id="shuttle-schedule-table"></div>
+        <div id="shuttle-schedule-table" style="display:none;"></div>
       </div>
 
       <div class="card">

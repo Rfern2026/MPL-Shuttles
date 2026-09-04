@@ -322,6 +322,12 @@ Alex Kim
       </div>
 
       <div class="card">
+        <h2>Clear Check-Ins</h2>
+        <p class="muted" style="margin-top:-6px;">Clears everyone's boarded status across all trips — useful while testing. Leaves the passenger list, drivers, shuttle schedule, and reservations untouched.</p>
+        <button class="btn danger" id="clear-checkins-btn">Clear All Check-Ins</button>
+      </div>
+
+      <div class="card">
         <h2>Reset</h2>
         <p class="muted" style="margin-top:-6px;">Clears the passenger list, drivers, shuttle schedule, reservations, and all check-ins for everyone on this event. Use between events, not during one.</p>
         <button class="btn danger" id="reset-btn">Reset Event Data</button>
@@ -743,6 +749,16 @@ Alex Kim
       });
     });
   }
+
+  el('clear-checkins-btn').addEventListener('click', async ()=>{
+    if(!confirm('Clear boarded status for everyone, across all trips? The passenger list, drivers, shuttle schedule, and reservations stay untouched. Cannot be undone.')) return;
+    checkins = {};
+    lastScan = null;
+    await saveCheckins();
+    el('setup-status').textContent = 'All check-ins cleared.';
+    renderCheckin();
+    renderDashboard();
+  });
 
   el('reset-btn').addEventListener('click', async ()=>{
     if(!confirm('This clears the passenger list, drivers, shuttle schedule, reservations, all check-ins, trip open/closed status, and the scan log for everyone viewing this event. Continue?')) return;

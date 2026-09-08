@@ -172,8 +172,8 @@
 
   <!-- MISSING-TRIP CONFIRMATION -->
   <div class="card hidden" id="missing-confirm-card">
-    <h2>Are You Sure?</h2>
-    <p class="muted" style="margin-top:-6px;">You haven't picked a shuttle for the trip(s) below. If you don't need a shuttle for these, confirm and we'll record that. Otherwise go back and pick one.</p>
+    <h2 id="missing-confirm-title">Are You Sure?</h2>
+    <p class="muted" style="margin-top:-6px;" id="missing-confirm-note">You haven't picked a shuttle for the trip(s) below. If you don't need a shuttle for these, confirm and we'll record that. Otherwise go back and pick one.</p>
     <div id="missing-trip-list"></div>
     <div class="row" style="margin-top:14px; gap:10px;">
       <button class="btn danger" id="missing-confirm-yes-btn">Yes, I don't need these — Save</button>
@@ -219,6 +219,10 @@
     { id: 'd2-eve-hotel', label: 'Wed 9/23 · Eve → Hotel' }
   ];
   const SKIP = 'none'; // sentinel value meaning "explicitly no shuttle needed for this trip"
+  // Trips everyone must ride — no "No shuttle needed" option offered, and they can't be
+  // skipped past the review screen.
+  const MANDATORY_SESSIONS = ['d1-am', 'd1-pm', 'd2-am', 'd2-pm'];
+  const isMandatory = (sessionId) => MANDATORY_SESSIONS.includes(sessionId);
   const closedKey = (sessionId, shuttle) => sessionId + '::' + shuttle;
   const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
   const el = id => document.getElementById(id);
@@ -438,7 +442,8 @@
           <span style="font-family:var(--mono); font-size:11px; color:${current===l?'var(--teal)':'var(--ink-soft)'};">${current===l ? 'Selected' : (isFull ? 'Full' : 'Choose')}</span>
         </div>`;
       }).join('');
-      const skipOption = `<div class="departure-option ${current===SKIP ? 'skip-selected' : ''}" data-session="${s.id}" data-shuttle="${SKIP}">
+      // Mandatory trips offer no opt-out — everyone rides these.
+      const skipOption = isMandatory(s.id) ? '' : `<div class="departure-option ${current===SKIP ? 'skip-selected' : ''}" data-session="${s.id}" data-shuttle="${SKIP}">
         <div>
           <div class="departure-name">No shuttle needed</div>
           <div class="departure-seats">I don\u2019t need a ride for this trip</div>
@@ -446,7 +451,7 @@
         <span style="font-family:var(--mono); font-size:11px; color:${current===SKIP?'var(--teal)':'var(--ink-soft)'};">${current===SKIP ? 'Selected' : 'Choose'}</span>
       </div>`;
       return `<div class="card">
-        <h2>${escapeHtml(s.label)}</h2>
+        <h2>${escapeHtml(s.label)}${isMandatory(s.id) ? ' <span style="color:var(--amber);">· Required</span>' : ''}</h2>
         ${options}
         ${skipOption}
       </div>`;
@@ -495,10 +500,25 @@
   el('confirm-save-btn').addEventListener('click', ()=>{
     const trips = reservableTrips();
     const missing = trips.filter(s => !tentativeSelections[s.id]);
+    const missingMandatory = missing.filter(s => isMandatory(s.id));
+    // Mandatory trips can't be skipped at all — send them straight back to pick one,
+    // rather than offering the "I don't need these" escape hatch.
+    if(missingMandatory.length > 0){
+      el('summary-card').classList.add('hidden');
+      el('missing-confirm-card').classList.remove('hidden');
+      el('missing-confirm-title').textContent = 'Required Trips Missing';
+      el('missing-confirm-note').textContent = 'A shuttle selection is required for the trip(s) below. Please go back and pick a departure time for each.';
+      el('missing-trip-list').innerHTML = missingMandatory.map(s=>`<div class="missing-trip-item">${escapeHtml(s.label)}</div>`).join('');
+      el('missing-confirm-yes-btn').style.display = 'none';
+      return;
+    }
     if(missing.length > 0){
       el('summary-card').classList.add('hidden');
       el('missing-confirm-card').classList.remove('hidden');
+      el('missing-confirm-title').textContent = 'Are You Sure?';
+      el('missing-confirm-note').textContent = 'You haven\u2019t picked a shuttle for the trip(s) below. If you don\u2019t need a shuttle for these, confirm and we\u2019ll record that. Otherwise go back and pick one.';
       el('missing-trip-list').innerHTML = missing.map(s=>`<div class="missing-trip-item">${escapeHtml(s.label)}</div>`).join('');
+      el('missing-confirm-yes-btn').style.display = 'inline-block';
       return;
     }
     doSave();
@@ -511,6 +531,12 @@
 
   el('missing-confirm-yes-btn').addEventListener('click', ()=>{
     const trips = reservableTrips();
+    // Safety net: never mark a mandatory trip as skipped, even if this button is somehow reached.
+    if(trips.some(s => isMandatory(s.id) && !tentativeSelections[s.id])){
+      el('missing-confirm-card').classList.add('hidden');
+      el('selection-flow').classList.remove('hidden');
+      return;
+    }
     trips.forEach(s=>{
       if(!tentativeSelections[s.id]) tentativeSelections[s.id] = SKIP;
     });

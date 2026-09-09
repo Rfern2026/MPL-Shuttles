@@ -969,12 +969,25 @@ Alex Kim
     const letters = shuttleLetters(getShuttleCount());
     const shuttleOptions = letters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('')
       + '<option value="">Substitute only</option>';
-    table.innerHTML = drivers.map(d=>`<div class="attendee-row">
+    const passengerOptions = '<option value="">— Not linked —</option>' +
+      roster.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(r=>`<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
+    table.innerHTML = drivers.map(d=>{
+      const linked = d.linkedPassengerId && roster.some(r=>r.id===d.linkedPassengerId);
+      const badge = linked
+        ? '<span class="badge" style="background:rgba(63,217,192,.15); color:var(--teal); border:1px solid var(--teal); font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; padding:3px 8px; border-radius:5px;">Linked</span>'
+        : '<span class="badge" style="background:rgba(255,107,107,.15); color:var(--red); border:1px solid var(--red); font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; padding:3px 8px; border-radius:5px;">⚠ Not linked</span>';
+      return `<div class="attendee-row" style="flex-wrap:wrap;">
       <input type="text" data-id="${d.id}" class="driver-name-edit" value="${escapeHtml(d.name)}" style="margin-bottom:0; flex:1; min-width:120px;">
       <select data-id="${d.id}" class="driver-shuttle-edit" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
       <button class="btn secondary driver-copy-link-btn" data-id="${d.id}" style="margin-left:8px;">Copy Link</button>
       <button class="btn danger driver-remove-btn" data-id="${d.id}" style="margin-left:8px;">Remove</button>
-    </div>`).join('');
+      <div style="flex-basis:100%; display:flex; align-items:center; gap:8px; margin-top:6px;">
+        <span class="attendee-meta">Passenger-list match:</span>
+        <select data-id="${d.id}" class="driver-link-edit" style="margin-bottom:0; width:auto; min-width:180px;">${passengerOptions}</select>
+        ${badge}
+      </div>
+    </div>`;
+    }).join('');
     table.querySelectorAll('.driver-shuttle-edit').forEach(sel=>{
       const d = drivers.find(x=>x.id===sel.dataset.id);
       if(d) sel.value = d.shuttle;
@@ -987,6 +1000,14 @@ Alex Kim
       input.addEventListener('change', async ()=>{
         const dd = drivers.find(x=>x.id===input.dataset.id);
         if(dd && input.value.trim()){ dd.name = input.value.trim(); await saveDrivers(); populateDriverSelect(); }
+      });
+    });
+    table.querySelectorAll('.driver-link-edit').forEach(sel=>{
+      const d = drivers.find(x=>x.id===sel.dataset.id);
+      if(d) sel.value = d.linkedPassengerId || '';
+      sel.addEventListener('change', async ()=>{
+        const dd = drivers.find(x=>x.id===sel.dataset.id);
+        if(dd){ dd.linkedPassengerId = sel.value || null; await saveDrivers(); renderDriversPreview(); populateDriverSelect(); }
       });
     });
     table.querySelectorAll('.driver-copy-link-btn').forEach(btn=>{
@@ -1257,14 +1278,26 @@ Alex Kim
       const cfg = shuttle === 'none' ? null : shuttleSchedule[closedKey(session, shuttle)];
       return { personId, name: person ? person.name : personId, shuttle, time: cfg ? cfg.time : '' };
     }).sort((a,b)=>a.name.localeCompare(b.name));
-    listEl.innerHTML = rows.map(r=>`<div class="attendee-row">
-      <div>
-        <div class="attendee-name">${escapeHtml(r.name)}</div>
-        <div class="attendee-meta">${r.shuttle === 'none' ? 'No shuttle needed' : 'Shuttle ' + r.shuttle + (r.time ? ' · ' + escapeHtml(r.time) : '')}</div>
-      </div>
-      <select class="reservation-reassign-select" data-key="${session}::${r.personId}" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
-      <button class="btn danger reservation-clear-btn" data-key="${session}::${r.personId}" style="margin-left:8px;">Clear</button>
-    </div>`).join('');
+    listEl.innerHTML = rows.map(r=>{
+      if(r.shuttle === 'driving'){
+        // They're the (possibly substitute) driver for this trip — managed in Driver
+        // Substitutions, not here. Show it plainly instead of a reassignable dropdown.
+        return `<div class="attendee-row">
+          <div>
+            <div class="attendee-name">${escapeHtml(r.name)}</div>
+            <div class="attendee-meta" style="color:var(--teal);">Driving this trip</div>
+          </div>
+        </div>`;
+      }
+      return `<div class="attendee-row">
+        <div>
+          <div class="attendee-name">${escapeHtml(r.name)}</div>
+          <div class="attendee-meta">${r.shuttle === 'none' ? 'No shuttle needed' : 'Shuttle ' + r.shuttle + (r.time ? ' · ' + escapeHtml(r.time) : '')}</div>
+        </div>
+        <select class="reservation-reassign-select" data-key="${session}::${r.personId}" style="margin-bottom:0; width:auto;">${shuttleOptions}</select>
+        <button class="btn danger reservation-clear-btn" data-key="${session}::${r.personId}" style="margin-left:8px;">Clear</button>
+      </div>`;
+    }).join('');
     listEl.querySelectorAll('.reservation-reassign-select').forEach(sel=>{
       sel.value = reservations[sel.dataset.key];
       sel.addEventListener('change', async ()=>{
@@ -1304,8 +1337,20 @@ Alex Kim
     }
   }
 
-  async function autoCheckInDriverAsPassenger(driverName, session, shuttle){
-    const match = roster.find(r => r.name.trim().toLowerCase() === driverName.trim().toLowerCase());
+  async function autoCheckInDriverAsPassenger(driverRecordOrName, session, shuttle){
+    // Prefer the explicit link set in Setup; fall back to name-matching for drivers not yet
+    // linked (same best-effort behavior as before, just no longer the only option).
+    let match = null;
+    if(typeof driverRecordOrName === 'object' && driverRecordOrName){
+      if(driverRecordOrName.linkedPassengerId){
+        match = roster.find(r => r.id === driverRecordOrName.linkedPassengerId);
+      }
+      if(!match){
+        match = roster.find(r => r.name.trim().toLowerCase() === driverRecordOrName.name.trim().toLowerCase());
+      }
+    } else {
+      match = roster.find(r => r.name.trim().toLowerCase() === String(driverRecordOrName).trim().toLowerCase());
+    }
     if(!match) return; // driver isn't on the passenger list — nothing to auto check-in
     const key = checkinKey(session, match.id);
     if(checkins[key]) return; // already checked in for this trip, nothing to do
@@ -1337,7 +1382,7 @@ Alex Kim
       shuttleSel.value = effectiveShuttle;
       renderLiveCounter();
       if(session){
-        await autoCheckInDriverAsPassenger(d.name, session, effectiveShuttle);
+        await autoCheckInDriverAsPassenger(d, session, effectiveShuttle);
         await logDriverTripStartIfNeeded(session, d.id, d.name, effectiveShuttle);
       }
     } else {
@@ -1391,6 +1436,7 @@ Alex Kim
         const val = reservations[checkinKey(s.id, r.id)];
         let text, color;
         if(val === 'none'){ text = 'No shuttle needed'; color = 'var(--ink-soft)'; }
+        else if(val === 'driving'){ text = 'Driving this trip'; color = 'var(--teal)'; }
         else if(val){
           const cfg = shuttleSchedule[closedKey(s.id, val)];
           text = (cfg ? cfg.time : '') + ' · Shuttle ' + val;
@@ -1485,7 +1531,7 @@ Alex Kim
       if(d && effectiveShuttle && Array.from(shuttleSel.options).some(o=>o.value===effectiveShuttle)){
         shuttleSel.value = effectiveShuttle;
         if(session){
-          await autoCheckInDriverAsPassenger(d.name, session, effectiveShuttle);
+          await autoCheckInDriverAsPassenger(d, session, effectiveShuttle);
           await logDriverTripStartIfNeeded(session, d.id, d.name, effectiveShuttle);
         }
       } else if(d && session && !effectiveShuttle){
@@ -1587,14 +1633,15 @@ Alex Kim
       let meta = done ? 'Boarded Shuttle ' + checkins[key].shuttle + ' · ' + new Date(checkins[key].time).toLocaleTimeString() : 'Not boarded this trip';
       if(mismatch) meta += ' · <span style="color:var(--red);">Assigned to Shuttle ' + r.assignedShuttle + '</span>';
       const reservedShuttle = reservations[checkinKey(session, r.id)];
-      const resMismatch = !done && reservedShuttle && reservedShuttle !== 'none' && reservedShuttle !== activeShuttle();
+      const resMismatch = !done && reservedShuttle && reservedShuttle !== 'none' && reservedShuttle !== 'driving' && reservedShuttle !== activeShuttle();
       const noReservationAtAll = !done && reservedShuttle === undefined;
-      if(reservedShuttle && reservedShuttle !== 'none' && !done){
+      if(reservedShuttle && reservedShuttle !== 'none' && reservedShuttle !== 'driving' && !done){
         meta += resMismatch
           ? ' · <span style="color:var(--red);">⚠ Reserved Shuttle ' + reservedShuttle + ' — not this one</span>'
           : ' · <span style="color:var(--teal);">Reserved Shuttle ' + reservedShuttle + '</span>';
       }
       if(reservedShuttle === 'none' && !done) meta += ' · <span style="color:var(--ink-soft);">No shuttle reserved</span>';
+      if(reservedShuttle === 'driving' && !done) meta += ' · <span style="color:var(--teal);">Driving this trip (on their own shuttle)</span>';
       if(noReservationAtAll) meta += ' · <span style="color:var(--amber);">⚠ No reservation on file</span>';
       const fullBlock = !done && shuttleFullNow;
       if(fullBlock) meta += ' · <span style="color:var(--red);">⚠ Shuttle full — no more check-ins</span>';
@@ -1619,6 +1666,7 @@ Alex Kim
     const res = reservations[checkinKey(session, personId)];
     if(res === undefined) return { status: 'missing' };
     if(res === 'none') return { status: 'declined' };
+    if(res === 'driving') return { status: 'declined' }; // they're driving elsewhere, not a mismatch — don't block or warn
     if(res === shuttle) return { status: 'match' };
     return { status: 'mismatch', reservedShuttle: res };
   }

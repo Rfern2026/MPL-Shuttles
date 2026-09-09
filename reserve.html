@@ -232,6 +232,16 @@
     { id: 'd2-eve-hotel', label: 'Wed 9/23 · Eve → Hotel' }
   ];
   const SKIP = 'none'; // sentinel value meaning "explicitly no shuttle needed for this trip"
+  const DRIVING = 'driving'; // sentinel meaning "this attendee is the driver for this trip — no reservation needed"
+
+  // Shared display logic for a reservation value, used everywhere one gets shown to the attendee.
+  function describeReservationValue(sessionId, val){
+    if(!val) return { text: 'Not selected yet', cls: 'missing' };
+    if(val === SKIP) return { text: 'No shuttle needed', cls: 'skipped' };
+    if(val === DRIVING) return { text: 'You\u2019re driving this trip', cls: 'chosen' };
+    const cfg = shuttleSchedule[closedKey(sessionId, val)];
+    return { text: (cfg ? cfg.time + ' · ' : '') + 'Shuttle ' + val, cls: 'chosen' };
+  }
   // Trips everyone must ride — no "No shuttle needed" option offered, and they can't be
   // skipped past the review screen.
   const MANDATORY_SESSIONS = ['d1-am', 'd1-pm', 'd2-am', 'd2-pm'];
@@ -244,7 +254,29 @@
   let shuttleSchedule = {};
   let reservations = {};
   let reservationSubmitted = {};
+  let drivers = [];
+  let driverSubs = {};
   let dataLoaded = false;
+
+  // Which shuttle a linked driver is actually driving on a given trip, accounting for
+  // substitutions — mirrors the same logic in the admin/driver apps.
+  function shuttleForDriverOnTrip(sessionId, driverId){
+    const subEntry = Object.entries(driverSubs).find(([k,v]) => k.startsWith(sessionId+'::') && v===driverId);
+    if(subEntry) return subEntry[0].split('::')[1];
+    const driver = drivers.find(d=>d.id===driverId);
+    if(!driver || !driver.shuttle) return null;
+    const replaced = driverSubs[closedKey(sessionId, driver.shuttle)];
+    if(replaced && replaced !== driverId) return null;
+    return driver.shuttle;
+  }
+
+  // Is the currently-identified attendee actually driving this specific trip? Returns the
+  // shuttle letter if so, otherwise null (including if a substitute has taken their shuttle).
+  function drivingShuttleFor(sessionId, personId){
+    const driver = drivers.find(d => d.linkedPassengerId === personId);
+    if(!driver) return null;
+    return shuttleForDriverOnTrip(sessionId, driver.id);
+  }
 
   function escapeHtml(s){
     return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -437,14 +469,7 @@
     el('locked-list').innerHTML = trips.map(s=>{
       const key = checkinKey(s.id, selectedPersonId);
       const val = reservations[key];
-      let text, cls;
-      if(!val){ text = 'Not recorded'; cls = 'missing'; }
-      else if(val === SKIP){ text = 'No shuttle needed'; cls = 'skipped'; }
-      else{
-        const cfg = shuttleSchedule[closedKey(s.id, val)];
-        text = (cfg ? cfg.time + ' · ' : '') + 'Shuttle ' + val;
-        cls = 'chosen';
-      }
+      const { text, cls } = val ? describeReservationValue(s.id, val) : { text: 'Not recorded', cls: 'missing' };
       return `<div class="summary-row">
         <div class="summary-trip">${escapeHtml(s.label)}</div>
         <div class="summary-choice ${cls}">${text}</div>
@@ -455,6 +480,20 @@
   function renderTripCards(trips){
     const container = el('trip-cards');
     container.innerHTML = trips.map(s=>{
+      // If this attendee is the (possibly substitute) driver for this specific trip, they don't
+      // reserve a seat — they're driving. Show that plainly instead of a picker, and mark the
+      // trip as handled so it never blocks the mandatory-trip check.
+      const drivingShuttle = drivingShuttleFor(s.id, selectedPersonId);
+      if(drivingShuttle){
+        tentativeSelections[s.id] = DRIVING;
+        return `<div class="card">
+          <h2>${escapeHtml(s.label)}</h2>
+          <div style="background:rgba(63,217,192,.08); border:1px solid var(--teal); border-radius:8px; padding:14px; text-align:center;">
+            <div style="color:var(--teal); font-weight:700; font-size:14px; margin-bottom:4px;">\uD83D\uDE90 You're driving this trip \u2014 Shuttle ${drivingShuttle}</div>
+            <div style="color:var(--ink-soft); font-size:12px;">No reservation needed. You'll be checked in automatically when you select this trip on your driver link.</div>
+          </div>
+        </div>`;
+      }
       const letters = shuttlesConfiguredFor(s.id);
       const current = tentativeSelections[s.id];
       const options = letters.map(l=>{
@@ -508,15 +547,7 @@
     el('missing-confirm-card').classList.add('hidden');
     el('summary-card').classList.remove('hidden');
     el('summary-list').innerHTML = trips.map(s=>{
-      const val = tentativeSelections[s.id];
-      let text, cls;
-      if(!val){ text = 'Not selected yet'; cls = 'missing'; }
-      else if(val === SKIP){ text = 'No shuttle needed'; cls = 'skipped'; }
-      else{
-        const cfg = shuttleSchedule[closedKey(s.id, val)];
-        text = (cfg ? cfg.time + ' · ' : '') + 'Shuttle ' + val;
-        cls = 'chosen';
-      }
+      const { text, cls } = describeReservationValue(s.id, tentativeSelections[s.id]);
       return `<div class="summary-row">
         <div class="summary-trip">${escapeHtml(s.label)}</div>
         <div class="summary-choice ${cls}">${text}</div>
@@ -613,6 +644,8 @@
     shuttleSchedule = (data && data.shuttleSchedule) || {};
     reservations = (data && data.reservations) || {};
     reservationSubmitted = (data && data.reservationSubmitted) || {};
+    drivers = (data && data.drivers) || [];
+    driverSubs = (data && data.driverSubs) || {};
     dataLoaded = true;
     restoreIdentityFromStorage();
     renderMainFlow();

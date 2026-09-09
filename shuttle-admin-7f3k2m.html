@@ -312,14 +312,17 @@ Alex Kim
       </div>
 
       <div class="card">
-        <h2>3 · Drivers</h2>
-        <p class="muted" style="margin-top:-6px;">Add each driver and the shuttle they're assigned to. On the Check-In tab, drivers pick their own name and the shuttle fills in automatically. Reassign anyone here anytime — changes apply immediately everywhere.</p>
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <h2 style="margin:0;">3 · Drivers</h2>
+          <button class="btn secondary" id="toggle-drivers-table-btn" style="margin-bottom:0;">Expand</button>
+        </div>
+        <p class="muted" style="margin-top:8px;">Add each driver and the shuttle they're assigned to. On the Check-In tab, drivers pick their own name and the shuttle fills in automatically. Reassign anyone here anytime — changes apply immediately everywhere.</p>
         <div class="row">
           <input type="text" id="driver-name-input" placeholder="Driver name" style="margin-bottom:0; flex:1; min-width:160px;">
           <select id="driver-shuttle-input" style="margin-bottom:0; width:auto;"></select>
           <button class="btn" id="add-driver-btn">Add Driver</button>
         </div>
-        <div id="drivers-table" style="margin-top:10px;"></div>
+        <div id="drivers-table" style="margin-top:10px; display:none;"></div>
       </div>
 
       <div class="card">
@@ -770,6 +773,13 @@ Alex Kim
     const collapsed = table.style.display === 'none';
     table.style.display = collapsed ? 'block' : 'none';
     el('toggle-roster-list-btn').textContent = collapsed ? 'Minimize' : 'Expand';
+  });
+
+  el('toggle-drivers-table-btn').addEventListener('click', ()=>{
+    const table = el('drivers-table');
+    const collapsed = table.style.display === 'none';
+    table.style.display = collapsed ? 'block' : 'none';
+    el('toggle-drivers-table-btn').textContent = collapsed ? 'Minimize' : 'Expand';
   });
 
   el('toggle-subs-table-btn').addEventListener('click', ()=>{

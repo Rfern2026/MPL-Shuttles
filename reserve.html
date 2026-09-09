@@ -16,6 +16,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
   :root{
@@ -84,6 +85,8 @@
     #print-area, #print-area *{ visibility: visible; }
     #print-area{ position: absolute; left:0; top:0; width:100%; background: white !important; color: black !important; padding: 20px; }
     #print-area .summary-trip, #print-area .summary-choice{ color: black !important; }
+    #print-area .muted{ color: #444 !important; }
+    #boarding-pass-block{ break-inside: avoid; }
   }
   .summary-row{
     display:flex; justify-content:space-between; align-items:center;
@@ -149,8 +152,18 @@
     <p class="muted" style="margin-top:-6px;">Submitted and locked in. If you need to change anything, contact the event organizer.</p>
     <div id="print-area">
       <div id="locked-list"></div>
+      <div id="boarding-pass-block" style="margin-top:20px; padding-top:18px; border-top:1px dashed var(--navy-panel-2);">
+        <p class="muted" style="margin:0 0 12px 0;">This is your boarding pass. Show it to the driver at every trip.</p>
+        <div style="background:#fff; color:#111; border-radius:10px; padding:16px; text-align:center;">
+          <div style="font-family:var(--mono); font-size:10px; letter-spacing:.12em; color:#666; text-transform:uppercase;">Boarding Pass</div>
+          <div style="font-size:17px; font-weight:700; margin:4px 0 12px 0;" id="pass-name"></div>
+          <div id="pass-qr" style="display:flex; justify-content:center;"></div>
+          <div style="font-family:var(--mono); font-size:12px; letter-spacing:.08em; color:#666; margin-top:10px;" id="pass-code"></div>
+        </div>
+        <p class="muted" style="margin:12px 0 0 0;">Printed copies will also be handed out on the first day of the conference, so there's no need to bring this if you'd rather not.</p>
+      </div>
     </div>
-    <button class="btn secondary full-width" id="print-btn" style="margin-top:14px;">Print My Selections</button>
+    <button class="btn secondary full-width" id="print-btn" style="margin-top:14px;">Print My Pass &amp; Selections</button>
   </div>
 
   <!-- SELECTION FLOW (one card per reservable trip) -->
@@ -397,11 +410,30 @@
     renderTripCards(trips);
   }
 
+  function renderBoardingPass(){
+    const person = roster.find(r=>r.id===selectedPersonId);
+    if(!person) return;
+    el('pass-name').textContent = person.name;
+    el('pass-code').textContent = person.id;
+    const target = el('pass-qr');
+    // Only build the QR once per person — QRCode appends rather than replaces.
+    if(target.dataset.renderedFor === person.id) return;
+    target.innerHTML = '';
+    try{
+      new QRCode(target, { text: person.id, width: 150, height: 150 });
+      target.dataset.renderedFor = person.id;
+    }catch(e){
+      console.error('QR render failed', e);
+      target.innerHTML = '<p style="color:#666; font-size:13px;">Your code: ' + escapeHtml(person.id) + '</p>';
+    }
+  }
+
   function renderLockedView(trips){
     el('selection-flow').classList.add('hidden');
     el('summary-card').classList.add('hidden');
     el('missing-confirm-card').classList.add('hidden');
     el('locked-view').classList.remove('hidden');
+    renderBoardingPass();
     el('locked-list').innerHTML = trips.map(s=>{
       const key = checkinKey(s.id, selectedPersonId);
       const val = reservations[key];

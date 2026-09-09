@@ -251,7 +251,11 @@
   @media screen{
     #reservations-print-area{ display: none; }
     #dashboard-print-area{ display: none; }
+    #summary-print-area{ display: none; }
   }
+  .summary-card-list{ text-align:left; width:100%; font-size:10px; line-height:1.65; }
+  .summary-card-list .trip-row{ display:flex; justify-content:space-between; gap:6px; border-bottom:1px dotted #c8ceda; padding:2px 0; }
+  .summary-card-list .trip-row .t{ color:#4A5A78; }
 </style>
 </head>
 <body>
@@ -362,6 +366,12 @@ Alex Kim
         <p class="muted" style="margin-top:-6px;">One pass per attendee — the same code is valid for all trips. Drivers pick the correct trip from a dropdown before scanning, so this one code checks in independently each time. The code below the QR also works for manual entry.</p>
         <button class="btn secondary" id="print-btn">Print All</button>
       </div>
+      <div class="card">
+        <h2>Reservation summaries</h2>
+        <p class="muted" style="margin-top:-6px;">One card per attendee, same size and same order as the boarding passes above — print this after the passes and feed the same stack back through your printer for double-sided cards (QR on the front, their reservations on the back).</p>
+        <button class="btn secondary" id="print-summaries-btn">Print Reservation Summaries</button>
+      </div>
+      <div id="summary-print-area" class="print-target"><div class="pass-grid" id="summary-grid"></div></div>
       <div id="print-area" class="print-target">
         <div class="pass-grid" id="pass-grid"></div>
       </div>
@@ -1176,9 +1186,10 @@ Alex Kim
     configuredLetters.forEach(l=>{
       const cfg = shuttleSchedule[closedKey(session, l)];
       const count = Object.entries(reservations).filter(([k,v]) => k.startsWith(session+'::') && v===l).length;
+      const passengerCap = Math.max(0, cfg.capacity - 1); // one seat is the driver's
       html += `<div class="flip-card">
         <div class="flip-label">Shuttle ${l} · ${escapeHtml(cfg.time)}</div>
-        <div class="flip-value">${count}<span style="font-size:16px;color:var(--ink-soft);"> / ${cfg.capacity}</span></div>
+        <div class="flip-value">${count}<span style="font-size:16px;color:var(--ink-soft);"> / ${passengerCap}</span></div>
       </div>`;
     });
     html += `</div>
@@ -1352,6 +1363,46 @@ Alex Kim
 
   el('print-btn').addEventListener('click', ()=> window.print());
 
+  el('print-summaries-btn').addEventListener('click', ()=>{
+    const grid = el('summary-grid');
+    if(roster.length === 0){
+      alert('Build a passenger list in the Setup tab first.');
+      return;
+    }
+    // Only trips that actually have a configured shuttle — matches what passengers could
+    // actually have reserved, keeps the card from listing trips nobody could book.
+    const reservableTrips = SESSIONS.filter(s => shuttleLettersFor(s.id).some(l => shuttleSchedule[closedKey(s.id, l)]));
+    grid.innerHTML = '';
+    roster.forEach(r=>{ // same order as the boarding-pass grid, so the two stacks line up when printed back-to-back
+      const rows = reservableTrips.map(s=>{
+        const val = reservations[checkinKey(s.id, r.id)];
+        let text, color;
+        if(val === 'none'){ text = 'No shuttle needed'; color = 'var(--ink-soft)'; }
+        else if(val){
+          const cfg = shuttleSchedule[closedKey(s.id, val)];
+          text = (cfg ? cfg.time : '') + ' · Shuttle ' + val;
+          color = 'var(--teal)';
+        } else {
+          text = 'Not yet reserved';
+          color = 'var(--red)';
+        }
+        return `<div class="trip-row"><span class="t">${escapeHtml(s.label)}</span><span style="color:${color};">${text}</span></div>`;
+      }).join('');
+      const card = document.createElement('div');
+      card.className = 'pass';
+      card.innerHTML = `
+        <div class="pass-top">
+          <div class="pass-eyebrow">Reservation Summary</div>
+          <div class="pass-name">${escapeHtml(r.name)}</div>
+        </div>
+        <div class="pass-bottom" style="align-items:stretch;">
+          <div class="summary-card-list">${rows || '<p class="muted" style="margin:0;">No trips configured yet.</p>'}</div>
+        </div>`;
+      grid.appendChild(card);
+    });
+    window.print();
+  });
+
   // ---- Check-in ----
   function populateShuttleActive(){
     const sel = el('checkin-shuttle-active');
@@ -1463,7 +1514,11 @@ Alex Kim
 
   // ---- Trip-complete review modal ----
   function showTripReviewModal(sessionId){
-    const missing = roster.filter(r=>!checkins[checkinKey(sessionId, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
+    const missing = roster.filter(r=>{
+      if(checkins[checkinKey(sessionId, r.id)]) return false; // already boarded
+      if(reservations[checkinKey(sessionId, r.id)] === 'none') return false; // explicitly doesn't need a shuttle
+      return true;
+    }).sort((a,b)=>a.name.localeCompare(b.name));
     el('trip-review-title').textContent = sessionLabel(sessionId) + ' — all shuttles closed';
     const body = el('trip-review-body');
     if(missing.length === 0){
@@ -1910,10 +1965,12 @@ Alex Kim
         const c = checkins[checkinKey(session, r.id)];
         return c && c.shuttle === l;
       }).length;
+      const reservedCount = roster.filter(r => reservations[checkinKey(session, r.id)] === l).length;
       const closed = isShuttleClosed(session, l);
       html += `<div class="flip-card">
         <div class="flip-label">Shuttle ${l}${closed ? ' · Closed' : ''}</div>
         <div class="flip-value">${boarded}</div>
+        <div class="attendee-meta" style="margin-top:2px;">${reservedCount} reserved</div>
         <button class="btn secondary shuttle-toggle-btn" data-shuttle="${l}" style="margin-top:10px; font-size:11px; padding:8px 10px; width:100%;">${closed ? 'Reopen' : 'Close'}</button>
       </div>`;
     });
@@ -1942,7 +1999,11 @@ Alex Kim
       });
     });
 
-    const missing = roster.filter(r=>!checkins[checkinKey(session, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
+    const missing = roster.filter(r=>{
+      if(checkins[checkinKey(session, r.id)]) return false; // already boarded
+      if(reservations[checkinKey(session, r.id)] === 'none') return false; // explicitly doesn't need a shuttle
+      return true;
+    }).sort((a,b)=>a.name.localeCompare(b.name));
     const missingEl = el('missing-list');
     if(missing.length === 0){
       missingEl.innerHTML = '<p class="muted">Everyone is accounted for on this trip.</p>';

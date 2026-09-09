@@ -1047,7 +1047,11 @@
 
   // ---- Trip-complete review modal ----
   function showTripReviewModal(sessionId){
-    const missing = roster.filter(r=>!checkins[checkinKey(sessionId, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
+    const missing = roster.filter(r=>{
+      if(checkins[checkinKey(sessionId, r.id)]) return false; // already boarded
+      if(reservations[checkinKey(sessionId, r.id)] === 'none') return false; // explicitly doesn't need a shuttle
+      return true;
+    }).sort((a,b)=>a.name.localeCompare(b.name));
     el('trip-review-title').textContent = sessionLabel(sessionId) + ' — all shuttles closed';
     const body = el('trip-review-body');
     if(missing.length === 0){
@@ -1466,10 +1470,12 @@
         const c = checkins[checkinKey(session, r.id)];
         return c && c.shuttle === l;
       }).length;
+      const reservedCount = roster.filter(r => reservations[checkinKey(session, r.id)] === l).length;
       const closed = isShuttleClosed(session, l);
       html += `<div class="flip-card">
         <div class="flip-label">Shuttle ${l}${closed ? ' · Closed' : ''}</div>
         <div class="flip-value">${boarded}</div>
+        <div class="attendee-meta" style="margin-top:2px;">${reservedCount} reserved</div>
         <button class="btn secondary shuttle-toggle-btn" data-shuttle="${l}" style="margin-top:10px; font-size:11px; padding:8px 10px; width:100%;">${closed ? 'Reopen' : 'Close'}</button>
       </div>`;
     });
@@ -1498,7 +1504,11 @@
       });
     });
 
-    const missing = roster.filter(r=>!checkins[checkinKey(session, r.id)]).sort((a,b)=>a.name.localeCompare(b.name));
+    const missing = roster.filter(r=>{
+      if(checkins[checkinKey(session, r.id)]) return false; // already boarded
+      if(reservations[checkinKey(session, r.id)] === 'none') return false; // explicitly doesn't need a shuttle
+      return true;
+    }).sort((a,b)=>a.name.localeCompare(b.name));
     const missingEl = el('missing-list');
     if(missing.length === 0){
       missingEl.innerHTML = '<p class="muted">Everyone is accounted for on this trip.</p>';

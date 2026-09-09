@@ -918,6 +918,18 @@ Alex Kim
     renderPasses(); renderCheckin(); renderDashboard(); renderLog(); renderShuttleScheduleTable(); renderReservationsTab(); renderDriverSubsTable();
   });
 
+  // All four print areas share the .print-target class, which becomes visible for ANY of them
+  // during printing — so whichever one you're NOT printing must be emptied first, or its
+  // leftover content from an earlier click overlaps the one you actually want.
+  function clearOtherPrintAreas(keepId){
+    ['pass-grid', 'summary-grid', 'dashboard-print-area', 'reservations-print-area'].forEach(id=>{
+      if(id !== keepId){
+        const node = el(id);
+        if(node) node.innerHTML = '';
+      }
+    });
+  }
+
   function escapeHtml(s){
     return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
@@ -1169,6 +1181,7 @@ Alex Kim
         }
       });
       el('reservations-print-area').innerHTML = printHtml;
+      clearOtherPrintAreas('reservations-print-area');
       window.print();
     };
 
@@ -1361,7 +1374,7 @@ Alex Kim
     });
   }
 
-  el('print-btn').addEventListener('click', ()=> window.print());
+  el('print-btn').addEventListener('click', ()=>{ clearOtherPrintAreas('pass-grid'); window.print(); });
 
   el('print-summaries-btn').addEventListener('click', ()=>{
     const grid = el('summary-grid');
@@ -1400,6 +1413,7 @@ Alex Kim
         </div>`;
       grid.appendChild(card);
     });
+    clearOtherPrintAreas('summary-grid');
     window.print();
   });
 
@@ -1955,6 +1969,7 @@ Alex Kim
         }
       });
       el('dashboard-print-area').innerHTML = printHtml;
+      clearOtherPrintAreas('dashboard-print-area');
       window.print();
     };
 

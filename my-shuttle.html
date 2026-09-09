@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>My Shuttle</title>
 
-<link rel="manifest" href="manifest-driver.json">
+<link rel="manifest" id="dynamic-manifest">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#0F1C33">
@@ -393,6 +393,35 @@
   const urlParams = new URLSearchParams(window.location.search);
   const lockedDriverId = urlParams.get('driver');
   let driverLockApplied = false; // guards the one-time auto-select so it doesn't re-fire on every sync
+
+  // ---- Personalized home-screen install ----
+  // A shared manifest file can't carry each driver's ?driver=<id>, so a static manifest would
+  // always install the same generic page. We build one in-browser instead, with this driver's
+  // own URL as start_url, so "Add to Home Screen" saves THEIR link — not someone else's.
+  (function buildDynamicManifest(){
+    const linkEl = document.getElementById('dynamic-manifest');
+    if(!linkEl) return;
+    const thisPage = window.location.pathname.split('/').pop() || 'my-shuttle.html';
+    const startUrl = lockedDriverId
+      ? `./${thisPage}?driver=${encodeURIComponent(lockedDriverId)}`
+      : `./${thisPage}`;
+    const manifest = {
+      name: 'My Shuttle — Driver Check-In',
+      short_name: 'My Shuttle',
+      start_url: startUrl,
+      scope: './',
+      display: 'standalone',
+      background_color: '#0F1C33',
+      theme_color: '#0F1C33',
+      orientation: 'portrait',
+      icons: [
+        { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: 'icon-512.png', sizes: '512x512', type: 'image/png' }
+      ]
+    };
+    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+    linkEl.href = URL.createObjectURL(blob);
+  })();
 
   // ============================================================
   // FIREBASE SETUP — do this once before sharing the file:

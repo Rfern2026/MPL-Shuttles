@@ -410,7 +410,7 @@ Alex Kim
         <p class="muted" style="margin-top:-6px;">Shows everyone not yet boarded on this trip. Tapping Check In logs them onto the trip and shuttle selected above.</p>
         <input type="text" id="checkin-search" placeholder="Search by name...">
         <label style="display:flex; align-items:center; gap:8px; font-family:var(--sans); font-size:13px; color:var(--paper); cursor:pointer;">
-          <input type="checkbox" id="show-boarded-toggle" checked style="width:auto; margin:0;"> Show already-boarded too
+          <input type="checkbox" id="show-boarded-toggle" style="width:auto; margin:0;"> Show already boarded passengers
         </label>
         <div id="checkin-list"></div>
       </div>
@@ -1569,7 +1569,7 @@ Alex Kim
       capacityLine = `<div style="font-family:var(--mono); font-size:12px; margin-top:8px; color:var(--ink-soft); line-height:1.7;">
         <div>Capacity ${bd.capacity} <span style="opacity:0.7;">(${Math.max(0, bd.capacity - 1)} passenger + driver)</span></div>
         <div>Reserved: ${bd.reserved} · <span style="color:var(--teal);">${bd.reservedBoarded} boarded</span> · <span style="color:var(--amber);">${bd.reservedPending} still expected</span></div>
-        <div><span style="color:${openColor};">${bd.seatsOpen} seat${bd.seatsOpen===1?'':'s'} physically open</span> · <span style="color:${walkOnColor};">${bd.walkOnOpen} available for walk-ons</span></div>
+        <div><span style="color:${openColor};">${bd.seatsOpen} seat${bd.seatsOpen===1?'':'s'} physically open</span> · <span style="color:${walkOnColor};">${bd.walkOnOpen} available for walk-ins</span></div>
       </div>`;
     }
     box.innerHTML = `<div class="flip-label">Shuttle ${shuttle} · ${sessionLabel(session)}</div>
@@ -1623,14 +1623,21 @@ Alex Kim
     const session = activeSession();
     let list = roster.filter(r => showBoarded || !checkins[checkinKey(session, r.id)]);
     if(q) list = list.filter(r => r.name.toLowerCase().includes(q));
-    // Boarded passengers float to the top (most recent first, so the last scan is right there),
-    // everyone still to board sits below in alphabetical order.
+    // Priority order: boarded first (most recent scan on top, so the last person checked in is
+    // right there) — then, among everyone still to board, whoever actually reserved THIS shuttle
+    // (the one currently selected / the one this driver is responsible for) — then everyone else
+    // alphabetically.
+    const shuttle = activeShuttle();
     list = list.slice().sort((a,b)=>{
       const ca = checkins[checkinKey(session, a.id)];
       const cb = checkins[checkinKey(session, b.id)];
       if(ca && !cb) return -1;
       if(!ca && cb) return 1;
       if(ca && cb) return cb.time - ca.time;
+      const aReserved = reservations[checkinKey(session, a.id)] === shuttle;
+      const bReserved = reservations[checkinKey(session, b.id)] === shuttle;
+      if(aReserved && !bReserved) return -1;
+      if(!aReserved && bReserved) return 1;
       return a.name.localeCompare(b.name);
     });
     const container = el('checkin-list');
@@ -1688,7 +1695,7 @@ Alex Kim
     return Math.max(0, cfg.capacity - boarded);
   }
 
-  // Full seat picture for a shuttle on a trip. Reserved seats are guaranteed: a walk-on can only
+  // Full seat picture for a shuttle on a trip. Reserved seats are guaranteed: a walk-in can only
   // take a seat once it's clear no reserved-but-not-yet-boarded passenger still needs it.
   function seatBreakdown(session, shuttle){
     const cfg = shuttleSchedule[closedKey(session, shuttle)];
@@ -1720,19 +1727,19 @@ Alex Kim
       } else if(rs.status === 'missing'){
         const bd = seatBreakdown(session, shuttle);
         if(bd){
-          // Reserved seats are guaranteed — a walk-on can only take a genuinely spare seat.
+          // Reserved seats are guaranteed — a walk-in can only take a genuinely spare seat.
           if(bd.walkOnOpen <= 0){
             alert(`${name} has no reservation for Shuttle ${shuttle} on this trip.\n\n`
               + `Capacity ${bd.capacity} · ${bd.boarded} boarded\n`
               + `${bd.reserved} reserved (${bd.reservedBoarded} boarded, ${bd.reservedPending} still expected)\n`
               + `${bd.seatsOpen} seat(s) physically open\n\n`
-              + `No seats available for walk-ons — the remaining seats are held for passengers who reserved.`);
+              + `No seats available for walk-ins — the remaining seats are held for passengers who reserved.`);
             return;
           }
           const ok = confirm(`${name} has no reservation for this trip.\n\n`
             + `Capacity ${bd.capacity} · ${bd.boarded} boarded\n`
             + `${bd.reserved} reserved (${bd.reservedBoarded} boarded, ${bd.reservedPending} still expected)\n`
-            + `${bd.walkOnOpen} seat(s) available for walk-ons\n\n`
+            + `${bd.walkOnOpen} seat(s) available for walk-ins\n\n`
             + `Check them in on Shuttle ${shuttle}?`);
           if(!ok) return;
         } else {
@@ -1911,7 +1918,7 @@ Alex Kim
           if(rs.status === 'missing'){
             const seatsOpen = seatsOpenOn(session, shuttle);
             const bd = seatBreakdown(session, shuttle);
-            const seatsNote = bd ? ` ${bd.walkOnOpen} seat(s) available for walk-ons (${bd.reservedPending} still held for reservations).` : '';
+            const seatsNote = bd ? ` ${bd.walkOnOpen} seat(s) available for walk-ins (${bd.reservedPending} still held for reservations).` : '';
             showFlash(r.name + ' has no reservation for this trip — NOT checked in.' + seatsNote, 'warn', true);
             playWarnTone();
             if(navigator.vibrate) navigator.vibrate([80,60,80]);

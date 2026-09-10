@@ -360,16 +360,21 @@
   let dataLoaded = false;
 
   const SESSIONS = [
-    { id: 'mon-dinner', label: 'Mon 9/21 · Dinner' },
-    { id: 'd1-am', label: 'Tue 9/22 · Morning' },
-    { id: 'd1-pm', label: 'Tue 9/22 · Afternoon' },
-    { id: 'd1-eve-hub', label: 'Tue 9/22 · Eve → HUB' },
-    { id: 'd1-eve-hotel', label: 'Tue 9/22 · Eve → Hotel' },
-    { id: 'd2-am', label: 'Wed 9/23 · Morning' },
-    { id: 'd2-pm', label: 'Wed 9/23 · Afternoon' },
-    { id: 'd2-eve-dinner', label: 'Wed 9/23 · Eve → Dinner' },
-    { id: 'd2-eve-hotel', label: 'Wed 9/23 · Eve → Hotel' }
+    { id: 'mon-dinner', label: 'Mon 9/21 · Dinner', date: '2026-09-21' },
+    { id: 'd1-am', label: 'Tue 9/22 · Morning', date: '2026-09-22' },
+    { id: 'd1-pm', label: 'Tue 9/22 · Afternoon', date: '2026-09-22' },
+    { id: 'd1-eve-hub', label: 'Tue 9/22 · Eve → HUB', date: '2026-09-22' },
+    { id: 'd1-eve-hotel', label: 'Tue 9/22 · Eve → Hotel', date: '2026-09-22' },
+    { id: 'd2-am', label: 'Wed 9/23 · Morning', date: '2026-09-23' },
+    { id: 'd2-pm', label: 'Wed 9/23 · Afternoon', date: '2026-09-23' },
+    { id: 'd2-eve-dinner', label: 'Wed 9/23 · Eve → Dinner', date: '2026-09-23' },
+    { id: 'd2-eve-hotel', label: 'Wed 9/23 · Eve → Hotel', date: '2026-09-23' }
   ];
+
+  function todayStr(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
   const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
   const closedKey = (sessionId, shuttle) => sessionId + '::' + shuttle;
   const isShuttleClosed = (sessionId, shuttle) => !!closedSessions[closedKey(sessionId, shuttle)];
@@ -967,9 +972,16 @@
       dashSel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}${isTripFullyClosed(s.id) ? ' (closed)' : ''}</option>`).join('');
     }
 
-    // Check-in: a trip is only selectable while at least one shuttle is still open for it.
+    // Check-in: a trip is only selectable while at least one shuttle is still open for it,
+    // AND only trips scheduled for today show up — no scrolling past two other days' trips to
+    // find the one that matters right now. If nothing matches today (testing before the event,
+    // or the day after it ends), fall back to showing every open trip so the picker never goes
+    // empty and unusable.
     const checkinSel = el('checkin-session-active');
-    const openSessions = SESSIONS.filter(s => !isTripFullyClosed(s.id));
+    const allOpen = SESSIONS.filter(s => !isTripFullyClosed(s.id));
+    const today = todayStr();
+    const todaysOpen = allOpen.filter(s => s.date === today);
+    const openSessions = todaysOpen.length > 0 ? todaysOpen : allOpen;
     const prev = checkinSel.value;
     checkinSel.innerHTML = '<option value="">— Select Trip —</option>' + openSessions.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
     if(openSessions.some(s=>s.id===prev)){
@@ -1044,7 +1056,7 @@
       capacityLine = `<div style="font-family:var(--mono); font-size:12px; margin-top:8px; color:var(--ink-soft); line-height:1.7;">
         <div>Capacity ${bd.capacity} <span style="opacity:0.7;">(${Math.max(0, bd.capacity - 1)} passenger + driver)</span></div>
         <div>Reserved: ${bd.reserved} · <span style="color:var(--teal);">${bd.reservedBoarded} boarded</span> · <span style="color:var(--amber);">${bd.reservedPending} still expected</span></div>
-        <div><span style="color:${openColor};">${bd.seatsOpen} seat${bd.seatsOpen===1?'':'s'} physically open</span> · <span style="color:${walkOnColor};">${bd.walkOnOpen} available for walk-ins</span></div>
+        <div><span style="color:${openColor};">${bd.seatsOpen} seat${bd.seatsOpen===1?'':'s'} physically open</span> · <span style="color:${walkOnColor};">${bd.walkOnOpen} available for walk-ons</span></div>
       </div>`;
     }
     box.innerHTML = `<div class="flip-label">Shuttle ${shuttle} · ${sessionLabel(session)}</div>
@@ -1170,7 +1182,7 @@
     return Math.max(0, cfg.capacity - boarded);
   }
 
-  // Full seat picture for a shuttle on a trip. Reserved seats are guaranteed: a walk-in can only
+  // Full seat picture for a shuttle on a trip. Reserved seats are guaranteed: a walk-on can only
   // take a seat once it's clear no reserved-but-not-yet-boarded passenger still needs it.
   function seatBreakdown(session, shuttle){
     const cfg = shuttleSchedule[closedKey(session, shuttle)];
@@ -1202,19 +1214,19 @@
       } else if(rs.status === 'missing'){
         const bd = seatBreakdown(session, shuttle);
         if(bd){
-          // Reserved seats are guaranteed — a walk-in can only take a genuinely spare seat.
+          // Reserved seats are guaranteed — a walk-on can only take a genuinely spare seat.
           if(bd.walkOnOpen <= 0){
             alert(`${name} has no reservation for Shuttle ${shuttle} on this trip.\n\n`
               + `Capacity ${bd.capacity} · ${bd.boarded} boarded\n`
               + `${bd.reserved} reserved (${bd.reservedBoarded} boarded, ${bd.reservedPending} still expected)\n`
               + `${bd.seatsOpen} seat(s) physically open\n\n`
-              + `No seats available for walk-ins — the remaining seats are held for passengers who reserved.`);
+              + `No seats available for walk-ons — the remaining seats are held for passengers who reserved.`);
             return;
           }
           const ok = confirm(`${name} has no reservation for this trip.\n\n`
             + `Capacity ${bd.capacity} · ${bd.boarded} boarded\n`
             + `${bd.reserved} reserved (${bd.reservedBoarded} boarded, ${bd.reservedPending} still expected)\n`
-            + `${bd.walkOnOpen} seat(s) available for walk-ins\n\n`
+            + `${bd.walkOnOpen} seat(s) available for walk-ons\n\n`
             + `Check them in on Shuttle ${shuttle}?`);
           if(!ok) return;
         } else {
@@ -1393,7 +1405,7 @@
           if(rs.status === 'missing'){
             const seatsOpen = seatsOpenOn(session, shuttle);
             const bd = seatBreakdown(session, shuttle);
-            const seatsNote = bd ? ` ${bd.walkOnOpen} seat(s) available for walk-ins (${bd.reservedPending} still held for reservations).` : '';
+            const seatsNote = bd ? ` ${bd.walkOnOpen} seat(s) available for walk-ons (${bd.reservedPending} still held for reservations).` : '';
             showFlash(r.name + ' has no reservation for this trip — NOT checked in.' + seatsNote, 'warn', true);
             playWarnTone();
             if(navigator.vibrate) navigator.vibrate([80,60,80]);

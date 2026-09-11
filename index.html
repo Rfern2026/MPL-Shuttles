@@ -43,7 +43,7 @@
   h1{ font-size: 20px; margin: 0; font-weight: 700; color: var(--accent-text); }
   .conf-note{ font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-text); opacity: 0.75; margin: 0 0 10px 0; }
   .bus-stage{ position: relative; height: 40px; margin: 10px 0 -4px 0; overflow: hidden; }
-  .bus-train{ position: absolute; top: 4px; display: flex; align-items: center; animation: driveAcross 8s linear infinite; }
+  .bus-train{ position: absolute; top: 4px; display: flex; align-items: center; animation: driveAcross 12s linear infinite; }
   .plant-pennant{
     background: #FFFFFF; color: var(--brand); font-family: var(--mono); font-size: 10px; font-weight: 700;
     padding: 3px 8px; border-radius: 3px; white-space: nowrap; margin-right: 6px;
@@ -306,7 +306,7 @@
     // Matches the bus's own 14s lap time exactly, so the 5 names stay fixed for the whole
     // pass across the screen and only swap to a fresh batch of 5 right as the bus loops back
     // around off-screen — never mid-crossing.
-    const BUS_LAP_SECONDS = 8;
+    const BUS_LAP_SECONDS = 12;
     let baseIdx = 0;
     setInterval(()=>{
       const nameEls = document.querySelectorAll('.plant-name-text');

@@ -1710,10 +1710,14 @@
     });
     const totalAll = roster.length;
     const boardedAll = roster.filter(r=>checkins[checkinKey(session, r.id)]).length;
-    html += `<div class="flip-card">
-      <div class="flip-label">Total Boarded</div>
-      <div class="flip-value total">${boardedAll}<span style="font-size:18px;color:var(--ink-soft);"> / ${totalAll}</span></div>
-    </div>`;
+    // For a locked driver (only ever one shuttle in `letters`), this summary card would just
+    // repeat the exact same number already shown in their single shuttle card above — skip it.
+    if(!lockedDriver){
+      html += `<div class="flip-card">
+        <div class="flip-label">Total Boarded</div>
+        <div class="flip-value total">${boardedAll}<span style="font-size:18px;color:var(--ink-soft);"> / ${totalAll}</span></div>
+      </div>`;
+    }
     grid.innerHTML = html;
     grid.querySelectorAll('.shuttle-toggle-btn').forEach(btn=>{
       btn.addEventListener('click', async ()=>{

@@ -1525,7 +1525,7 @@ Alex Kim
     // Dashboard: always shows every trip (fully-closed ones marked), populated once.
     const dashSel = el('dashboard-session-select');
     if(dashSel.options.length === 0){
-      dashSel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}${isTripFullyClosed(s.id) ? ' (closed)' : ''}</option>`).join('');
+      dashSel.innerHTML = '<option value="">— Select Trip —</option>' + SESSIONS.map(s=>`<option value="${s.id}">${s.label}${isTripFullyClosed(s.id) ? ' (closed)' : ''}</option>`).join('');
     }
 
     // Check-in: a trip is only selectable while at least one shuttle is still open for it,
@@ -2025,6 +2025,13 @@ Alex Kim
       return;
     }
     const session = el('dashboard-session-select').value;
+    if(!session){
+      el('flip-grid').innerHTML = '<p class="muted">Pick a trip above to see its shuttles.</p>';
+      el('missing-list').innerHTML = '';
+      el('toggle-close-trip-btn').style.display = 'none';
+      el('trip-status-note').textContent = '';
+      return;
+    }
     const letters = shuttleLettersFor(session);
     const allClosed = isTripFullyClosed(session);
     const anyOpen = letters.some(l => !isShuttleClosed(session, l));

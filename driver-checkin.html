@@ -50,6 +50,7 @@
   .header{
     padding: 0;
     border-bottom: 2px solid var(--navy-panel-2);
+    position: relative;
   }
   .header-top{
     background: var(--band-bg);
@@ -60,6 +61,16 @@
     font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
     color: var(--accent-text); opacity: 0.75; margin: -8px 0 14px 0;
   }
+  .sync-status{
+    position: absolute; top: 14px; right: 16px;
+    display: flex; align-items: center; gap: 5px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--accent-text); opacity: 0.9;
+  }
+  .sync-status .dot{ width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.5); flex-shrink: 0; }
+  .sync-status.synced .dot{ background: var(--teal); }
+  .sync-status.offline .dot{ background: var(--red); }
+  .sync-status.offline{ color: var(--red); }
   .tabs{ padding: 0 20px; background: var(--navy); }
   .header-top{
     display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px;
@@ -271,6 +282,7 @@
 <div class="board-root">
   <div id="config-banner" class="hidden">⚠ Firebase isn't configured yet — open this file and paste your firebaseConfig near the top of the script. Nothing will save until that's done.</div>
   <div class="header">
+    <div id="sync-status" class="sync-status"><span class="dot"></span><span id="sync-status-text">Connecting</span></div>
     <div class="header-top">
       <div>
         <p class="eyebrow">MP&L Driver Check-In</p>
@@ -1651,11 +1663,22 @@
   }
 
   // ---- Live sync from Firestore (fires immediately on load, then on every change from any device) ----
+  function updateSyncStatus(state){
+    const badge = el('sync-status');
+    const text = el('sync-status-text');
+    if(!badge || !text) return;
+    badge.className = 'sync-status' + (state !== 'connecting' ? ' ' + state : '');
+    text.textContent = state === 'synced' ? 'Synced' : (state === 'offline' ? 'Offline' : 'Connecting');
+  }
   if(isConfigured){
     eventDocRef.onSnapshot(
-      doc => onRemoteUpdate(doc.data()),
-      err => { console.error('Firestore sync error', err); document.getElementById('config-banner').classList.remove('hidden'); }
+      doc => {
+        updateSyncStatus(doc.metadata.fromCache ? 'offline' : 'synced');
+        onRemoteUpdate(doc.data());
+      },
+      err => { console.error('Firestore sync error', err); document.getElementById('config-banner').classList.remove('hidden'); updateSyncStatus('offline'); }
     );
+    window.addEventListener('offline', ()=> updateSyncStatus('offline'));
   } else {
     renderCheckin();
     renderDashboard();

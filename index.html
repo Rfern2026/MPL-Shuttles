@@ -21,18 +21,20 @@
 <style>
   :root{
     --navy:#F4F6F9; --navy-panel:#FFFFFF; --navy-panel-2:#D9E0EA;
+    --brand:#556F8C; --band-bg:#4A6178; --accent-text:#FFFFFF;
     --amber:#B45309; --teal:#047857; --red:#B91C1C; --paper:#16202E; --ink-soft:#5B6B7F;
     --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   }
   *{box-sizing:border-box;}
   body{ font-family: var(--sans); background: var(--navy); color: var(--paper); margin:0; padding:0; min-height:100vh; }
-  .header{ background: linear-gradient(180deg, var(--navy-panel) 0%, var(--navy) 100%); padding: 20px; border-bottom: 2px solid var(--navy-panel-2); }
-  .eyebrow{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--amber); text-transform: uppercase; margin: 0 0 4px 0; }
-  h1{ font-size: 20px; margin: 0; font-weight: 700; }
+  .header{ background: var(--band-bg); padding: 16px 20px 14px 20px; border-bottom: 2px solid var(--navy-panel-2); }
+  .eyebrow{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--accent-text); text-transform: uppercase; margin: 0 0 4px 0; }
+  h1{ font-size: 20px; margin: 0; font-weight: 700; color: var(--accent-text); }
+  .conf-note{ font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-text); opacity: 0.75; margin: 8px 0 0 0; }
   .panel{ padding: 20px; max-width: 560px; margin: 0 auto; }
   .card{ background: var(--navy-panel); border: 1px solid var(--navy-panel-2); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
-  .card h2{ font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--amber); margin: 0 0 12px 0; font-family: var(--mono); }
+  .card h2{ font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand); margin: 0 0 12px 0; font-family: var(--mono); }
   label{ display:block; font-size: 12px; color: var(--ink-soft); margin-bottom: 6px; font-family: var(--mono); letter-spacing: 0.04em; }
   select, input[type=text]{
     width: 100%; background: var(--navy); border: 1px solid var(--navy-panel-2); color: var(--paper);
@@ -53,7 +55,7 @@
     background: var(--navy); border: 1px solid var(--navy-panel-2); border-radius: 8px;
     padding: 14px 16px; margin-bottom: 10px; cursor: pointer;
   }
-  .departure-option.selected{ border-color: var(--teal); background: rgba(63,217,192,0.08); }
+  .departure-option.selected{ border-color: var(--teal); background: rgba(4,120,87,0.08); }
   .departure-option.skip-selected{ border-color: var(--ink-soft); background: rgba(74,90,120,0.15); }
   .departure-option.full{ opacity: 0.5; cursor: default; }
   .departure-name{ font-weight: 600; font-size: 15px; }
@@ -62,7 +64,7 @@
   .departure-seats.full{ color: var(--red); }
   .btn{
     font-family: var(--mono); font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;
-    background: var(--amber); color: var(--navy); border: none; border-radius: 6px;
+    background: var(--brand); color: var(--accent-text); border: none; border-radius: 6px;
     padding: 10px 16px; cursor: pointer; font-weight: 700;
   }
   .btn:disabled{ opacity: 0.4; cursor: not-allowed; }
@@ -73,8 +75,8 @@
   .flash{
     padding: 12px 14px; border-radius: 8px; font-family: var(--mono); font-size: 13px; margin-bottom: 14px;
   }
-  .flash.ok{ background: rgba(63,217,192,0.15); color: var(--teal); border:1px solid var(--teal); }
-  .flash.warn{ background: rgba(255,107,107,0.15); color: var(--red); border:1px solid var(--red); }
+  .flash.ok{ background: rgba(4,120,87,0.15); color: var(--teal); border:1px solid var(--teal); }
+  .flash.warn{ background: rgba(185,28,28,0.15); color: var(--red); border:1px solid var(--red); }
   #config-banner{
     background: var(--red); color: var(--navy); font-family: var(--mono); font-size: 12px;
     padding: 10px 20px; text-align: center; font-weight: 700;
@@ -99,7 +101,7 @@
   .summary-choice.skipped{ color: var(--ink-soft); }
   .summary-choice.missing{ color: var(--amber); }
   .missing-trip-item{
-    padding: 8px 12px; background: rgba(255,176,32,0.1); border: 1px solid var(--amber);
+    padding: 8px 12px; background: rgba(180,83,9,0.1); border: 1px solid var(--amber);
     border-radius: 6px; margin-bottom: 8px; font-size: 14px;
   }
 </style>
@@ -110,6 +112,7 @@
 <div class="header">
   <p class="eyebrow">MP&L Shuttles</p>
   <h1 id="page-title">Pick Your Shuttles</h1>
+  <p class="conf-note">2026 FNG NA Annual MP&amp;L Leadership Conference &middot; Troy, 9/22&ndash;23</p>
 </div>
 
 <div class="panel">
@@ -488,7 +491,7 @@
         tentativeSelections[s.id] = DRIVING;
         return `<div class="card">
           <h2>${escapeHtml(s.label)}</h2>
-          <div style="background:rgba(63,217,192,.08); border:1px solid var(--teal); border-radius:8px; padding:14px; text-align:center;">
+          <div style="background:rgba(4,120,87,.08); border:1px solid var(--teal); border-radius:8px; padding:14px; text-align:center;">
             <div style="color:var(--teal); font-weight:700; font-size:14px; margin-bottom:4px;">\uD83D\uDE90 You're driving this trip \u2014 Shuttle ${drivingShuttle}</div>
             <div style="color:var(--ink-soft); font-size:12px;">No reservation needed. You'll be checked in automatically when you select this trip on your driver link.</div>
           </div>

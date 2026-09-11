@@ -286,8 +286,8 @@
     <div class="tabs">
       <button class="tab" data-tab="setup">Setup</button>
       <button class="tab" data-tab="passes">QR Codes</button>
-      <button class="tab active" data-tab="checkin">Check-In</button>
-      <button class="tab" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="checkin">Check-In</button>
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
       <button class="tab" data-tab="log">Log</button>
       <button class="tab" data-tab="reservations">Reservations</button>
     </div>
@@ -395,7 +395,7 @@ Alex Kim
     </div>
 
     <!-- CHECKIN TAB -->
-    <div id="tab-checkin" class="tab-content">
+    <div id="tab-checkin" class="tab-content hidden">
       <div class="card">
         <h2>This Driver is boarding</h2>
         <p class="muted" style="margin-top:-6px;">Pick your name to auto-fill your assigned shuttle, then set the trip. Every check-in below — scanned or tapped — gets logged to this trip and shuttle. The same boarding pass works for all trips.</p>
@@ -431,7 +431,7 @@ Alex Kim
     </div>
 
     <!-- DASHBOARD TAB -->
-    <div id="tab-dashboard" class="tab-content hidden">
+    <div id="tab-dashboard" class="tab-content">
       <div class="card">
         <h2>Viewing trip</h2>
         <div class="row">
@@ -745,8 +745,11 @@ Alex Kim
     renderDriversPreview();
     renderDriverSubsTable();
     renderShuttleScheduleTable();
+    // Populates both the Dashboard and Check-In trip dropdowns — needed regardless of which
+    // of those two tabs is active, since either one could be the default on load.
+    if(activeTab === 'checkin' || activeTab === 'dashboard') populateSessionSelects();
     if(activeTab === 'passes') renderPasses();
-    if(activeTab === 'checkin'){ populateSessionSelects(); populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }
+    if(activeTab === 'checkin'){ populateDriverSelect(); renderCheckinList(); renderLiveCounter(); }
     if(activeTab === 'dashboard') renderDashboard();
     if(activeTab === 'log') renderLog();
     if(activeTab === 'reservations') renderReservationsTab();

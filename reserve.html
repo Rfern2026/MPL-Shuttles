@@ -43,16 +43,16 @@
   h1{ font-size: 20px; margin: 0; font-weight: 700; color: var(--accent-text); }
   .conf-note{ font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-text); opacity: 0.75; margin: 0 0 10px 0; }
   .bus-stage{ position: relative; height: 40px; margin: 10px 0 -4px 0; overflow: hidden; }
-  .bus-train{ position: absolute; top: 4px; display: flex; align-items: center; animation: driveAcross 4.5s linear infinite; }
+  .bus-train{ position: absolute; top: 4px; display: flex; align-items: center; animation: driveAcross 6s linear infinite; }
   .plant-pennant{
-    background: #FFFFFF; color: var(--brand); font-family: var(--mono); font-size: 10px; font-weight: 700;
-    padding: 4px 10px; border-radius: 4px; white-space: nowrap; margin-right: 5px;
-    max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+    background: #FFFFFF; color: var(--brand); font-family: var(--mono); font-size: 9px; font-weight: 700;
+    padding: 3px 7px; border-radius: 3px; white-space: nowrap; margin-right: 6px;
+    max-width: 78px; overflow: hidden; text-overflow: ellipsis;
     box-shadow: 0 1px 3px rgba(0,0,0,0.25);
     transition: opacity 0.25s ease;
   }
-  .tow-line{ width: 14px; height: 2px; background: rgba(255,255,255,0.6); margin-right: 3px; flex-shrink: 0; }
-  @keyframes driveAcross{ 0%{ left: -230px; } 100%{ left: 100%; } }
+  .tow-line{ width: 12px; height: 2px; background: rgba(255,255,255,0.6); margin-right: 3px; flex-shrink: 0; }
+  @keyframes driveAcross{ 0%{ left: -620px; } 100%{ left: 100%; } }
   @media (prefers-reduced-motion: reduce){ .bus-train{ animation: none; left: 20px; } }
   .panel{ padding: 20px; max-width: 560px; margin: 0 auto; }
   .card{ background: var(--navy-panel); border: 1px solid var(--navy-panel-2); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
@@ -153,7 +153,15 @@
   <h1 id="page-title">Pick Your Shuttles</h1>
   <div class="bus-stage">
     <div class="bus-train">
-      <div class="plant-pennant"><span id="plant-name-text">Texas</span></div>
+      <div class="plant-pennant"><span class="plant-name-text" data-slot="4">Ridgetown</span></div>
+      <div class="tow-line"></div>
+      <div class="plant-pennant"><span class="plant-name-text" data-slot="3">Angola</span></div>
+      <div class="tow-line"></div>
+      <div class="plant-pennant"><span class="plant-name-text" data-slot="2">San Jose Metales</span></div>
+      <div class="tow-line"></div>
+      <div class="plant-pennant"><span class="plant-name-text" data-slot="1">Chicago</span></div>
+      <div class="tow-line"></div>
+      <div class="plant-pennant"><span class="plant-name-text" data-slot="0">Texas</span></div>
       <div class="tow-line"></div>
       <svg width="52" height="30" viewBox="0 0 60 34" aria-hidden="true">
         <rect x="2" y="4" width="56" height="22" rx="8" fill="#FFFFFF"/>
@@ -281,19 +289,24 @@
     return; // skip the rest of the app entirely — no need to even connect to Firestore
   }
 
-  // Plant names cycling on the pennant "tied" to the back of the animated bus.
-  const PLANT_NAMES = ["Texas","Chicago","San Jose Metales","Shelby","Ionia","Hermosillo","Masterguard","Evart","Troy","Covington","Saltillo","VentraMex","Peterborough","Guardian West","Detroit","Sandusky","Fowlerville","Vari-Form","Windsor SPD","Battle Creek","Lunkomex","Reynosa","Kansas","San Jose Plasticos","Bradford","Effingham","Salem","Royal Oak","Rantoul","Rockford","Alabama","Oklahoma","Danville","Grand Rapids 5","Seeburn","Urbana","Flex Canada","Windsor","Howard","Nine Mile","Kitchener","Lakeshore","Russellville","Grand Rapids 29","X-Cel","Royal Oak","Forming Tech","GYPSA","Angola","Ridgetown"];
+  // Plant names cycling on the 5 pennants "tied" to the back of the animated bus, closest
+  // pennant to the bus is slot 0. A sliding window over the list means every name eventually
+  // passes through every slot as it advances.
+  const PLANT_NAMES = ["Texas","Chicago","San Jose Metales","Shelby","Ionia","Hermosillo","Masterguard","Evart","Troy","Covington","Saltillo","VentraMex","Peterborough","Guardian West","Detroit","Sandusky","Fowlerville","Vari-Form","Windsor SPD","Battle Creek","Lunkomex","Reynosa","Kansas","San Jose Plasticos","Bradford","Effingham","Salem","Royal Oak","Rantoul","Rockford","Alabama","Oklahoma","Danville","Grand Rapids 5","Seeburn","Urbana","Flex Canada","Windsor","Howard","Nine Mile","Kitchener","Lakeshore","Russellville","Grand Rapids 29","X-Cel","Forming Tech","GYPSA","Angola","Ridgetown"];
   const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if(!prefersReducedMotion){
-    let plantIdx = 0;
+    let baseIdx = 0;
     setInterval(()=>{
-      const nameEl = document.getElementById('plant-name-text');
-      if(!nameEl) return;
-      nameEl.style.opacity = '0';
+      const nameEls = document.querySelectorAll('.plant-name-text');
+      if(nameEls.length === 0) return;
+      nameEls.forEach(el=> el.style.opacity = '0');
       setTimeout(()=>{
-        plantIdx = (plantIdx + 1) % PLANT_NAMES.length;
-        nameEl.textContent = PLANT_NAMES[plantIdx];
-        nameEl.style.opacity = '1';
+        baseIdx = (baseIdx + 1) % PLANT_NAMES.length;
+        nameEls.forEach(el=>{
+          const slot = parseInt(el.dataset.slot, 10) || 0;
+          el.textContent = PLANT_NAMES[(baseIdx + slot) % PLANT_NAMES.length];
+          el.style.opacity = '1';
+        });
       }, 250);
     }, 1800);
   }

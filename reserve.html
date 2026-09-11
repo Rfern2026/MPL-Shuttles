@@ -51,7 +51,7 @@
     transition: opacity 0.3s ease;
   }
   .tow-line{ width: 12px; height: 2px; background: rgba(255,255,255,0.6); margin-right: 3px; flex-shrink: 0; }
-  @keyframes driveAcross{ 0%{ left: -900px; } 100%{ left: 100%; } }
+  @keyframes driveAcross{ 0%{ left: -1400px; } 100%{ left: 100%; } }
   @media (prefers-reduced-motion: reduce){ .bus-train{ animation: none; left: 20px; } }
   .panel{ padding: 20px; max-width: 560px; margin: 0 auto; }
   .card{ background: var(--navy-panel); border: 1px solid var(--navy-panel-2); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
@@ -152,9 +152,15 @@
   <h1 id="page-title">Pick Your Shuttles</h1>
   <div class="bus-stage">
     <div class="bus-train">
-      <div class="plant-pennant"><span class="plant-name-text" data-slot="4">Ridgetown</span></div>
+      <div class="plant-pennant"><span class="plant-name-text" data-slot="7">Ridgetown</span></div>
       <div class="tow-line"></div>
-      <div class="plant-pennant"><span class="plant-name-text" data-slot="3">Angola</span></div>
+      <div class="plant-pennant"><span class="plant-name-text" data-slot="6">Angola</span></div>
+      <div class="tow-line"></div>
+      <div class="plant-pennant"><span class="plant-name-text" data-slot="5">GYPSA</span></div>
+      <div class="tow-line"></div>
+      <div class="plant-pennant"><span class="plant-name-text" data-slot="4">Forming Tech</span></div>
+      <div class="tow-line"></div>
+      <div class="plant-pennant"><span class="plant-name-text" data-slot="3">X-Cel</span></div>
       <div class="tow-line"></div>
       <div class="plant-pennant"><span class="plant-name-text" data-slot="2">San Jose Metales</span></div>
       <div class="tow-line"></div>
@@ -302,7 +308,7 @@
     setInterval(()=>{
       const nameEls = document.querySelectorAll('.plant-name-text');
       if(nameEls.length === 0) return;
-      baseIdx = (baseIdx + 5) % PLANT_NAMES.length;
+      baseIdx = (baseIdx + 8) % PLANT_NAMES.length;
       nameEls.forEach(el=>{
         const slot = parseInt(el.dataset.slot, 10) || 0;
         el.textContent = PLANT_NAMES[(baseIdx + slot) % PLANT_NAMES.length];

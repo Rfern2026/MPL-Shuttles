@@ -130,6 +130,14 @@
   </div>
 </div>
 
+<div id="reservations-closed-overlay" style="position:fixed; inset:0; background:var(--band-bg); z-index:9999; display:none; align-items:center; justify-content:center; padding:24px;">
+  <div style="background:var(--navy-panel); border-radius:14px; padding:32px 28px; max-width:380px; text-align:center;">
+    <p style="font-family:var(--mono); font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--brand); margin:0 0 10px 0;">2026 FNG NA Annual MP&amp;L Leadership Conference</p>
+    <h1 style="font-size:20px; margin:0 0 12px 0; color:var(--paper);">Reservations Are Closed</h1>
+    <p style="color:var(--ink-soft); font-size:14px; line-height:1.6; margin:0;">The deadline to reserve a shuttle for this event has passed. If you still need a reservation, please contact your event organizer directly.</p>
+  </div>
+</div>
+
 <div id="config-banner" class="hidden">⚠ Firebase isn't configured in this file yet.</div>
 <div class="header">
   <div id="sync-status" class="sync-status"><span class="dot"></span><span id="sync-status-text">Connecting</span></div>
@@ -244,6 +252,17 @@
     document.querySelector('.header').style.display = 'none';
     document.querySelector('.panel').style.display = 'none';
     document.getElementById('event-ended-overlay').style.display = 'flex';
+  }
+  function showReservationsClosedOverlay(){
+    document.querySelector('.header').style.display = 'none';
+    document.querySelector('.panel').style.display = 'none';
+    document.getElementById('reservations-closed-overlay').style.display = 'flex';
+  }
+  function restoreNormalView(){
+    document.querySelector('.header').style.display = '';
+    document.querySelector('.panel').style.display = '';
+    document.getElementById('event-ended-overlay').style.display = 'none';
+    document.getElementById('reservations-closed-overlay').style.display = 'none';
   }
   if(todayStr() >= EVENT_LOCK_DATE){
     showEventEndedOverlay();
@@ -696,7 +715,13 @@
     reservations = (data && data.reservations) || {};
     reservationSubmitted = (data && data.reservationSubmitted) || {};
     drivers = (data && data.drivers) || [];
-    if((data && data.siteActive) === false){ showEventEndedOverlay(); return; } // admin manually deactivated — stop here regardless of date
+    const reservationDeadline = (data && data.reservationDeadline) || '';
+    const reservationsForceOpen = (data && data.reservationsForceOpen) === true;
+    if(reservationDeadline && todayStr() >= reservationDeadline && !reservationsForceOpen){
+      showReservationsClosedOverlay();
+      return; // deadline passed and admin hasn't manually reopened it — stop here
+    }
+    restoreNormalView(); // in case a previous snapshot had shown either overlay
     driverSubs = (data && data.driverSubs) || {};
     dataLoaded = true;
     restoreIdentityFromStorage();

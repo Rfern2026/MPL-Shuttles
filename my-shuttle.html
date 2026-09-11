@@ -435,6 +435,13 @@
     document.querySelector('.board-root').style.display = 'none';
     el('event-ended-overlay').style.display = 'flex';
   }
+  function restoreNormalView(){
+    // Undoes the overlay above — needed so a page left open during a deactivation correctly
+    // comes back to life on its own if the admin reactivates driver links, without requiring
+    // the driver to reload.
+    document.querySelector('.board-root').style.display = '';
+    el('event-ended-overlay').style.display = 'none';
+  }
   if(todayStr() >= EVENT_LOCK_DATE){
     showEventEndedOverlay();
     return; // skip the rest of the app entirely — no need to even connect to Firestore
@@ -695,7 +702,8 @@
     tripShuttleLetters = (data && data.tripShuttleLetters) || {};
     driverTripLog = (data && data.driverTripLog) || {};
     driverSubs = (data && data.driverSubs) || {};
-    if((data && data.siteActive) === false){ showEventEndedOverlay(); return; } // admin manually deactivated — stop here regardless of date
+    if((data && data.driverSitesActive) === false){ showEventEndedOverlay(); return; } // admin manually deactivated — stop here regardless of date
+    restoreNormalView(); // in case a previous snapshot had shown the overlay
     dataLoaded = true;
     // Populate the trip dropdown BEFORE locking the driver in — the driver-lock's auto-select
     // needs a valid trip already in place, otherwise activeSession() reads empty on this first

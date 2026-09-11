@@ -310,12 +310,6 @@
     <!-- SETUP TAB -->
     <div id="tab-setup" class="tab-content hidden">
       <div class="card">
-        <h2>Event Status</h2>
-        <p class="muted" style="margin-top:-6px;">Controls the passenger reservation site and every driver's personal link. Once you flip this off, anyone opening those links — including people you already sent them to — sees a plain "this event has ended" message instead of the app. Your own admin tool and driver-checkin.html stay working regardless, so you can keep reviewing data after the event.</p>
-        <p style="margin:10px 0;"><strong id="site-status-label">Checking…</strong></p>
-        <button class="btn danger" id="toggle-site-active-btn">Loading…</button>
-      </div>
-      <div class="card">
         <h2>1 · Build Passenger List</h2>
         <p class="muted" style="margin-top:-6px;">Paste one attendee per line. Add the last 4 digits of their phone after a comma to enable reservation verification (optional — you can also fill it in per-row below later). Boarding is first come, first served — nobody is pre-assigned to a shuttle; drivers just log which shuttle each person actually gets on.</p>
         <label for="names-input">Attendee names</label>
@@ -391,6 +385,24 @@ Alex Kim
         <h2>Reset</h2>
         <p class="muted" style="margin-top:-6px;">Clears the passenger list, drivers, shuttle schedule, reservations, and all check-ins for everyone on this event. Use between events, not during one.</p>
         <button class="btn danger" id="reset-btn">Reset Event Data</button>
+      </div>
+
+      <div class="card">
+        <h2>Reservation Deadline</h2>
+        <p class="muted" style="margin-top:-6px;">Once this date passes, the reservation site shows "Reservations Closed" and tells people to contact you directly, instead of the normal booking flow. Leave blank to never auto-close reservations.</p>
+        <div class="row">
+          <input type="date" id="reservation-deadline-input" style="margin-bottom:0; width:auto;">
+          <button class="btn secondary" id="save-reservation-deadline-btn">Save Deadline</button>
+        </div>
+        <p style="margin:10px 0 0 0;"><strong id="reservation-status-label">Checking…</strong></p>
+        <button class="btn danger hidden" id="toggle-reservation-reopen-btn" style="margin-top:8px;"></button>
+      </div>
+
+      <div class="card">
+        <h2>Driver Sites Status</h2>
+        <p class="muted" style="margin-top:-6px;">Controls every driver's personal link only — the reservation site has its own separate deadline above. Once deactivated, anyone opening a driver link — including drivers you already sent one to — sees a plain "this event has ended" message. Your own admin tool and driver-checkin.html stay working regardless.</p>
+        <p style="margin:10px 0;"><strong id="driver-sites-status-label">Checking…</strong></p>
+        <button class="btn danger" id="toggle-driver-sites-btn">Loading…</button>
       </div>
     </div>
 
@@ -541,7 +553,9 @@ Alex Kim
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
   let driverTripLog = {}; // {sessionId::driverId: {time, shuttle, name}} — when each driver started each trip
   let driverSubs = {}; // {sessionId::shuttle: driverId} — per-trip override of who drives that shuttle (absent = the regular assigned driver)
-  let siteActive = true; // controls whether reserve.html/index.html and my-shuttle.html show the app or a locked "event ended" message
+  let driverSitesActive = true; // controls whether every driver's personal link (my-shuttle.html) shows the app or a locked "event ended" message
+  let reservationDeadline = ''; // 'YYYY-MM-DD' — once passed, the reservation site shows "Reservations Closed" instead of the booking flow
+  let reservationsForceOpen = false; // manual override to reopen reservations even after the deadline has passed
   let shuttleCount = 3; // synced across all devices now, not a local-only setting
   let tripShuttleLetters = {}; // {sessionId: ['A','C','D']} — which specific shuttles run this trip; absent = all of them (up to shuttleCount)
   let html5QrCode = null;
@@ -759,8 +773,11 @@ Alex Kim
     tripShuttleLetters = (data && data.tripShuttleLetters) || {};
     driverTripLog = (data && data.driverTripLog) || {};
     driverSubs = (data && data.driverSubs) || {};
-    siteActive = (data && data.siteActive) !== false; // absent/undefined = active, only an explicit false locks it
-    renderSiteStatusControl();
+    driverSitesActive = (data && data.driverSitesActive) !== false; // absent/undefined = active, only an explicit false locks it
+    reservationDeadline = (data && data.reservationDeadline) || '';
+    reservationsForceOpen = (data && data.reservationsForceOpen) === true;
+    renderDriverSitesControl();
+    renderReservationDeadlineControl();
     el('shuttle-count').value = shuttleCount;
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
@@ -962,33 +979,82 @@ Alex Kim
     renderLiveCounter();
   });
 
-  function renderSiteStatusControl(){
-    const label = el('site-status-label');
-    const btn = el('toggle-site-active-btn');
+  function renderDriverSitesControl(){
+    const label = el('driver-sites-status-label');
+    const btn = el('toggle-driver-sites-btn');
     if(!label || !btn) return;
-    if(siteActive){
-      label.textContent = 'Active — the reservation site and driver links are working normally.';
+    if(driverSitesActive){
+      label.textContent = 'Active — every driver\u2019s personal link is working normally.';
       label.style.color = 'var(--teal)';
-      btn.textContent = 'Deactivate Reservation & Driver Links';
+      btn.textContent = 'Deactivate Driver Links';
     } else {
-      label.textContent = 'Deactivated — anyone opening the reservation site or a driver link sees an "event has ended" message.';
+      label.textContent = 'Deactivated — anyone opening a driver link sees an "event has ended" message.';
       label.style.color = 'var(--red)';
-      btn.textContent = 'Reactivate Reservation & Driver Links';
+      btn.textContent = 'Reactivate Driver Links';
     }
   }
 
-  el('toggle-site-active-btn').addEventListener('click', async ()=>{
-    const goingActive = !siteActive;
+  el('toggle-driver-sites-btn').addEventListener('click', async ()=>{
+    const goingActive = !driverSitesActive;
     const msg = goingActive
-      ? 'Reactivate the reservation site and every driver\'s personal link? They\'ll immediately start working again for anyone who has the link.'
-      : 'Deactivate the reservation site and every driver\'s personal link? Anyone opening those links — including people you already sent them to — will immediately see an "event has ended" message instead. Your own admin tool and driver-checkin.html keep working either way. You can reverse this anytime.';
+      ? 'Reactivate every driver\'s personal link? They\'ll immediately start working again for anyone who has one.'
+      : 'Deactivate every driver\'s personal link? Anyone opening one — including drivers you already sent one to — will immediately see an "event has ended" message instead. Your own admin tool and driver-checkin.html keep working either way. You can reverse this anytime.';
     if(!confirm(msg)) return;
-    siteActive = goingActive;
+    driverSitesActive = goingActive;
     if(isConfigured){
-      try{ await eventDocRef.set({ siteActive }, { merge: true }); }
-      catch(e){ console.error('Failed to save site status', e); }
+      try{ await eventDocRef.set({ driverSitesActive }, { merge: true }); }
+      catch(e){ console.error('Failed to save driver sites status', e); }
     }
-    renderSiteStatusControl();
+    renderDriverSitesControl();
+  });
+
+  function renderReservationDeadlineControl(){
+    const input = el('reservation-deadline-input');
+    const label = el('reservation-status-label');
+    const reopenBtn = el('toggle-reservation-reopen-btn');
+    if(!input || !label || !reopenBtn) return;
+    input.value = reservationDeadline || '';
+    const deadlinePassed = reservationDeadline && todayStr() >= reservationDeadline;
+    if(!reservationDeadline){
+      label.textContent = 'No deadline set — reservations stay open until you set one.';
+      label.style.color = 'var(--ink-soft)';
+      reopenBtn.classList.add('hidden');
+    } else if(deadlinePassed && !reservationsForceOpen){
+      label.textContent = `Closed — the deadline (${reservationDeadline}) has passed. Attendees now see "Reservations Closed."`;
+      label.style.color = 'var(--red)';
+      reopenBtn.classList.remove('hidden');
+      reopenBtn.textContent = 'Reopen Reservations';
+    } else if(deadlinePassed && reservationsForceOpen){
+      label.textContent = `Manually reopened — the deadline (${reservationDeadline}) already passed, but you've reopened reservations anyway.`;
+      label.style.color = 'var(--amber)';
+      reopenBtn.classList.remove('hidden');
+      reopenBtn.textContent = 'Close Reservations Again';
+    } else {
+      label.textContent = `Open — closes automatically after ${reservationDeadline}.`;
+      label.style.color = 'var(--teal)';
+      reopenBtn.classList.add('hidden');
+    }
+  }
+
+  el('save-reservation-deadline-btn').addEventListener('click', async ()=>{
+    const val = el('reservation-deadline-input').value;
+    reservationDeadline = val || '';
+    reservationsForceOpen = false; // changing the deadline clears any prior manual override
+    if(isConfigured){
+      try{ await eventDocRef.set({ reservationDeadline, reservationsForceOpen }, { merge: true }); }
+      catch(e){ console.error('Failed to save reservation deadline', e); }
+    }
+    renderReservationDeadlineControl();
+    el('setup-status').textContent = reservationDeadline ? `Reservation deadline set to ${reservationDeadline}.` : 'Reservation deadline cleared — reservations stay open indefinitely.';
+  });
+
+  el('toggle-reservation-reopen-btn').addEventListener('click', async ()=>{
+    reservationsForceOpen = !reservationsForceOpen;
+    if(isConfigured){
+      try{ await eventDocRef.set({ reservationsForceOpen }, { merge: true }); }
+      catch(e){ console.error('Failed to save reservation override', e); }
+    }
+    renderReservationDeadlineControl();
   });
 
   el('reset-btn').addEventListener('click', async ()=>{

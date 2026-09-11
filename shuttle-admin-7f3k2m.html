@@ -437,11 +437,19 @@ Alex Kim
         <div class="row">
           <select id="dashboard-session-select" style="margin-bottom:0; width:auto;"></select>
           <button class="btn secondary" id="toggle-close-trip-btn"></button>
-          <button class="btn secondary" id="print-boarded-manifest-btn">Print Boarded Manifest</button>
         </div>
         <p class="muted" id="trip-status-note" style="margin-top:8px;"></p>
       </div>
       <div class="flip-grid" id="flip-grid"></div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <h2 style="margin:0;">Boarded Manifest</h2>
+          <button class="btn secondary" id="toggle-boarded-manifest-btn">View</button>
+        </div>
+        <p class="muted" style="margin-top:8px;">A quick on-screen look at who's boarded each shuttle so far — updates live as scans come in. Handy for checking during boarding without triggering a print.</p>
+        <div id="boarded-manifest-view" style="display:none; margin-top:12px;"></div>
+        <button class="btn secondary" id="print-boarded-manifest-btn" style="margin-top:12px;">Print Boarded Manifest</button>
+      </div>
       <div class="card">
         <h2>Not yet boarded on this trip</h2>
         <div id="missing-list" class="missing-list"></div>
@@ -799,6 +807,13 @@ Alex Kim
     const collapsed = table.style.display === 'none';
     table.style.display = collapsed ? 'block' : 'none';
     el('toggle-drivers-table-btn').textContent = collapsed ? 'Minimize' : 'Expand';
+  });
+
+  el('toggle-boarded-manifest-btn').addEventListener('click', ()=>{
+    const view = el('boarded-manifest-view');
+    const hidden = view.style.display === 'none';
+    view.style.display = hidden ? 'block' : 'none';
+    el('toggle-boarded-manifest-btn').textContent = hidden ? 'Hide' : 'View';
   });
 
   el('toggle-subs-table-btn').addEventListener('click', ()=>{
@@ -2034,6 +2049,35 @@ Alex Kim
     el('trip-status-note').textContent = allClosed
       ? 'Every shuttle is closed for this trip — it no longer appears in the driver\u2019s trip picker.'
       : (anyOpen ? 'Tap a shuttle below to close or reopen it individually for this trip.' : '');
+
+    // On-screen boarded manifest — same underlying data as the print version, but rendered
+    // as normal app UI (not the print-only black/white layout) so it's quick to glance at on
+    // a phone mid-boarding without triggering a print dialog.
+    (function renderBoardedManifestView(){
+      const view = el('boarded-manifest-view');
+      if(!view) return;
+      view.innerHTML = letters.map(l=>{
+        const cfg = shuttleSchedule[closedKey(session, l)];
+        const boarded = roster.filter(r=>{
+          const c = checkins[checkinKey(session, r.id)];
+          return c && c.shuttle === l;
+        }).map(r=>({ name: r.name, time: checkins[checkinKey(session, r.id)].time }))
+          .sort((a,b)=>b.time-a.time); // most recently boarded first — matches Check-In tab convention
+        const tripDriver = driverForTrip(session, l);
+        const driverLabel = tripDriver
+          ? escapeHtml(tripDriver.name) + (driverSubs[closedKey(session, l)] ? ' (sub)' : '')
+          : '<span style="color:var(--red);">Not yet assigned</span>';
+        const capNote = cfg ? `${boarded.length} / ${cfg.capacity} boarded incl. driver` : `${boarded.length} boarded`;
+        const rows = boarded.length === 0
+          ? '<p class="muted" style="margin:6px 0 0 0;">Nobody boarded this shuttle yet.</p>'
+          : boarded.map(b=>`<div class="attendee-row"><div class="attendee-name">${escapeHtml(b.name)}</div><div class="attendee-meta">${new Date(b.time).toLocaleTimeString()}</div></div>`).join('');
+        return `<div class="card" style="margin-bottom:10px;">
+          <h3 style="margin:0 0 4px 0; font-family:var(--mono); font-size:14px; text-transform:uppercase; letter-spacing:0.06em; color:var(--brand);">Shuttle ${l} <span class="attendee-meta" style="text-transform:none; letter-spacing:0;">&middot; ${capNote}</span></h3>
+          <p class="attendee-meta" style="margin:0 0 8px 0;">Driver: ${driverLabel}</p>
+          ${rows}
+        </div>`;
+      }).join('');
+    })();
 
     el('print-boarded-manifest-btn').onclick = ()=>{
       let printHtml = `<h2 style="margin-bottom:4px;">${escapeHtml(sessionLabel(session))} — Boarded Manifest</h2>

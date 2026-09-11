@@ -478,8 +478,10 @@ Alex Kim
         <p class="muted" style="margin-top:-6px;">Send passengers the reservation link (reserve.html) so they can pick a departure time themselves. This tab shows who reserved what — it's read-only except for clearing a reservation if someone needs to be freed up.</p>
         <div class="row">
           <select id="reservations-session-select" style="margin-bottom:0; width:auto;"></select>
+          <button class="btn secondary" id="toggle-reservations-view-btn">View</button>
           <button class="btn secondary" id="print-manifest-btn">Print This Trip's Manifest</button>
         </div>
+        <div id="reservations-manifest-view" style="display:none; margin-top:12px;"></div>
       </div>
       <div class="card">
         <h2>Reset a passenger</h2>
@@ -817,6 +819,13 @@ Alex Kim
     const hidden = view.style.display === 'none';
     view.style.display = hidden ? 'block' : 'none';
     el('toggle-boarded-manifest-btn').textContent = hidden ? 'Hide' : 'View';
+  });
+
+  el('toggle-reservations-view-btn').addEventListener('click', ()=>{
+    const view = el('reservations-manifest-view');
+    const hidden = view.style.display === 'none';
+    view.style.display = hidden ? 'block' : 'none';
+    el('toggle-reservations-view-btn').textContent = hidden ? 'Hide' : 'View';
   });
 
   el('toggle-subs-table-btn').addEventListener('click', ()=>{
@@ -1252,6 +1261,35 @@ Alex Kim
       clearOtherPrintAreas('reservations-print-area');
       window.print();
     };
+
+    // On-screen version of the same manifest — grouped by shuttle like the print copy, but as
+    // normal app UI so it's quick to check on a phone without printing anything.
+    (function renderReservationsManifestView(){
+      const view = el('reservations-manifest-view');
+      if(!view) return;
+      const tripLetters = letters.filter(l => shuttleSchedule[closedKey(session, l)]);
+      if(tripLetters.length === 0){
+        view.innerHTML = '<p class="muted">No shuttle schedule configured for this trip yet.</p>';
+        return;
+      }
+      view.innerHTML = tripLetters.map(l=>{
+        const cfg = shuttleSchedule[closedKey(session, l)];
+        const names = roster.filter(r => reservations[checkinKey(session, r.id)] === l)
+          .map(r=>r.name).sort((a,b)=>a.localeCompare(b));
+        const tripDriver = driverForTrip(session, l);
+        const driverLabel = tripDriver
+          ? escapeHtml(tripDriver.name) + (driverSubs[closedKey(session, l)] ? ' (sub)' : '')
+          : '<span style="color:var(--red);">Not yet assigned</span>';
+        const rows = names.length === 0
+          ? '<p class="muted" style="margin:6px 0 0 0;">No reservations yet.</p>'
+          : names.map(n=>`<div class="attendee-row"><div class="attendee-name">${escapeHtml(n)}</div></div>`).join('');
+        return `<div class="card" style="margin-bottom:10px;">
+          <h3 style="margin:0 0 4px 0; font-family:var(--mono); font-size:14px; text-transform:uppercase; letter-spacing:0.06em; color:var(--brand);">Shuttle ${l} &middot; ${escapeHtml(cfg.time)} <span class="attendee-meta" style="text-transform:none; letter-spacing:0;">&middot; ${names.length} reserved / ${Math.max(0, cfg.capacity - 1)} passenger seats</span></h3>
+          <p class="attendee-meta" style="margin:0 0 8px 0;">Driver: ${driverLabel}</p>
+          ${rows}
+        </div>`;
+      }).join('');
+    })();
 
     const configuredLetters = letters.filter(l => shuttleSchedule[closedKey(session, l)]);
     if(configuredLetters.length === 0){

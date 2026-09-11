@@ -279,6 +279,14 @@
 </head>
 <body>
 
+<div id="event-ended-overlay" class="hidden" style="position:fixed; inset:0; background:var(--band-bg); z-index:9999; display:none; align-items:center; justify-content:center; padding:24px;">
+  <div style="background:var(--navy-panel); border-radius:14px; padding:32px 28px; max-width:380px; text-align:center;">
+    <p style="font-family:var(--mono); font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--brand); margin:0 0 10px 0;">2026 FNG NA Annual MP&amp;L Leadership Conference</p>
+    <h1 style="font-size:20px; margin:0 0 12px 0; color:var(--text);">This Event Has Ended</h1>
+    <p style="color:var(--ink-soft); font-size:14px; line-height:1.6; margin:0;">Thanks for riding with us! Shuttle check-in and reservations are no longer active. If you need anything, please reach out to your event organizer directly.</p>
+  </div>
+</div>
+
 <div class="board-root">
   <div id="config-banner" class="hidden">⚠ Firebase isn't configured yet — open this file and paste your firebaseConfig near the top of the script. Nothing will save until that's done.</div>
   <div class="header">
@@ -419,6 +427,17 @@
   function todayStr(){
     const d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+  // Automatic safety net in case the admin forgets to manually deactivate — a day after the
+  // event ends, the link stops working on its own regardless of the Firestore flag below.
+  const EVENT_LOCK_DATE = '2026-09-24';
+  function showEventEndedOverlay(){
+    document.querySelector('.board-root').style.display = 'none';
+    el('event-ended-overlay').style.display = 'flex';
+  }
+  if(todayStr() >= EVENT_LOCK_DATE){
+    showEventEndedOverlay();
+    return; // skip the rest of the app entirely — no need to even connect to Firestore
   }
   const checkinKey = (sessionId, personId) => sessionId + '::' + personId;
   const closedKey = (sessionId, shuttle) => sessionId + '::' + shuttle;
@@ -676,6 +695,7 @@
     tripShuttleLetters = (data && data.tripShuttleLetters) || {};
     driverTripLog = (data && data.driverTripLog) || {};
     driverSubs = (data && data.driverSubs) || {};
+    if((data && data.siteActive) === false){ showEventEndedOverlay(); return; } // admin manually deactivated — stop here regardless of date
     dataLoaded = true;
     // Populate the trip dropdown BEFORE locking the driver in — the driver-lock's auto-select
     // needs a valid trip already in place, otherwise activeSession() reads empty on this first

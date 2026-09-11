@@ -310,6 +310,12 @@
     <!-- SETUP TAB -->
     <div id="tab-setup" class="tab-content hidden">
       <div class="card">
+        <h2>Event Status</h2>
+        <p class="muted" style="margin-top:-6px;">Controls the passenger reservation site and every driver's personal link. Once you flip this off, anyone opening those links — including people you already sent them to — sees a plain "this event has ended" message instead of the app. Your own admin tool and driver-checkin.html stay working regardless, so you can keep reviewing data after the event.</p>
+        <p style="margin:10px 0;"><strong id="site-status-label">Checking…</strong></p>
+        <button class="btn danger" id="toggle-site-active-btn">Loading…</button>
+      </div>
+      <div class="card">
         <h2>1 · Build Passenger List</h2>
         <p class="muted" style="margin-top:-6px;">Paste one attendee per line. Add the last 4 digits of their phone after a comma to enable reservation verification (optional — you can also fill it in per-row below later). Boarding is first come, first served — nobody is pre-assigned to a shuttle; drivers just log which shuttle each person actually gets on.</p>
         <label for="names-input">Attendee names</label>
@@ -535,6 +541,7 @@ Alex Kim
   let reservationSubmitted = {}; // {personId: true} — has this passenger completed the reservation flow
   let driverTripLog = {}; // {sessionId::driverId: {time, shuttle, name}} — when each driver started each trip
   let driverSubs = {}; // {sessionId::shuttle: driverId} — per-trip override of who drives that shuttle (absent = the regular assigned driver)
+  let siteActive = true; // controls whether reserve.html/index.html and my-shuttle.html show the app or a locked "event ended" message
   let shuttleCount = 3; // synced across all devices now, not a local-only setting
   let tripShuttleLetters = {}; // {sessionId: ['A','C','D']} — which specific shuttles run this trip; absent = all of them (up to shuttleCount)
   let html5QrCode = null;
@@ -752,6 +759,8 @@ Alex Kim
     tripShuttleLetters = (data && data.tripShuttleLetters) || {};
     driverTripLog = (data && data.driverTripLog) || {};
     driverSubs = (data && data.driverSubs) || {};
+    siteActive = (data && data.siteActive) !== false; // absent/undefined = active, only an explicit false locks it
+    renderSiteStatusControl();
     el('shuttle-count').value = shuttleCount;
     dataLoaded = true;
     const activeTab = document.querySelector('.tab.active').dataset.tab;
@@ -951,6 +960,35 @@ Alex Kim
     renderReservationsTab();
     renderCheckinList();
     renderLiveCounter();
+  });
+
+  function renderSiteStatusControl(){
+    const label = el('site-status-label');
+    const btn = el('toggle-site-active-btn');
+    if(!label || !btn) return;
+    if(siteActive){
+      label.textContent = 'Active — the reservation site and driver links are working normally.';
+      label.style.color = 'var(--teal)';
+      btn.textContent = 'Deactivate Reservation & Driver Links';
+    } else {
+      label.textContent = 'Deactivated — anyone opening the reservation site or a driver link sees an "event has ended" message.';
+      label.style.color = 'var(--red)';
+      btn.textContent = 'Reactivate Reservation & Driver Links';
+    }
+  }
+
+  el('toggle-site-active-btn').addEventListener('click', async ()=>{
+    const goingActive = !siteActive;
+    const msg = goingActive
+      ? 'Reactivate the reservation site and every driver\'s personal link? They\'ll immediately start working again for anyone who has the link.'
+      : 'Deactivate the reservation site and every driver\'s personal link? Anyone opening those links — including people you already sent them to — will immediately see an "event has ended" message instead. Your own admin tool and driver-checkin.html keep working either way. You can reverse this anytime.';
+    if(!confirm(msg)) return;
+    siteActive = goingActive;
+    if(isConfigured){
+      try{ await eventDocRef.set({ siteActive }, { merge: true }); }
+      catch(e){ console.error('Failed to save site status', e); }
+    }
+    renderSiteStatusControl();
   });
 
   el('reset-btn').addEventListener('click', async ()=>{

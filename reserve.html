@@ -294,20 +294,20 @@
   const PLANT_NAMES = ["Texas","Chicago","San Jose Metales","Shelby","Ionia","Hermosillo","Masterguard","Evart","Troy","Covington","Saltillo","VentraMex","Peterborough","Guardian West","Detroit","Sandusky","Fowlerville","Vari-Form","Windsor SPD","Battle Creek","Lunkomex","Reynosa","Kansas","San Jose Plasticos","Bradford","Effingham","Salem","Royal Oak","Rantoul","Rockford","Alabama","Oklahoma","Danville","Grand Rapids 5","Seeburn","Urbana","Flex Canada","Windsor","Howard","Nine Mile","Kitchener","Lakeshore","Russellville","Grand Rapids 29","X-Cel","Forming Tech","GYPSA","Angola","Ridgetown"];
   const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if(!prefersReducedMotion){
+    // Matches the bus's own 14s lap time exactly, so the 5 names stay fixed for the whole
+    // pass across the screen and only swap to a fresh batch of 5 right as the bus loops back
+    // around off-screen — never mid-crossing.
+    const BUS_LAP_SECONDS = 14;
     let baseIdx = 0;
     setInterval(()=>{
       const nameEls = document.querySelectorAll('.plant-name-text');
       if(nameEls.length === 0) return;
-      nameEls.forEach(el=> el.style.opacity = '0');
-      setTimeout(()=>{
-        baseIdx = (baseIdx + 1) % PLANT_NAMES.length;
-        nameEls.forEach(el=>{
-          const slot = parseInt(el.dataset.slot, 10) || 0;
-          el.textContent = PLANT_NAMES[(baseIdx + slot) % PLANT_NAMES.length];
-          el.style.opacity = '1';
-        });
-      }, 300);
-    }, 3200);
+      baseIdx = (baseIdx + 5) % PLANT_NAMES.length;
+      nameEls.forEach(el=>{
+        const slot = parseInt(el.dataset.slot, 10) || 0;
+        el.textContent = PLANT_NAMES[(baseIdx + slot) % PLANT_NAMES.length];
+      });
+    }, BUS_LAP_SECONDS * 1000);
   }
   // ============================================================
   // Uses the SAME Firebase project as the admin app (shuttle-admin-7f3k2m.html) —

@@ -242,6 +242,14 @@
   .flip-value{ font-family: var(--mono); font-size: 34px; color: var(--brand); font-weight: 700; margin-top: 6px; letter-spacing: 0.02em; }
   .flip-value.total{ color: var(--teal); }
   .missing-list .attendee-name{ color: var(--red); }
+  .stat-card{ background: var(--navy-panel); border: 1px solid var(--navy-panel-2); border-radius: 10px; padding: 14px; }
+  .stat-label{ font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 6px; }
+  .stat-value{ font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--brand); }
+  .stat-sub{ font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .summary-trip-row{ display:flex; justify-content:space-between; align-items:center; padding: 8px 0; border-bottom: 1px solid var(--navy-panel-2); font-size: 13px; }
+  .summary-trip-row:last-child{ border-bottom: none; }
+  .summary-bar-bg{ background: var(--navy-panel-2); border-radius: 4px; height: 6px; width: 90px; overflow: hidden; }
+  .summary-bar-fill{ background: var(--teal); height: 100%; }
 
   #config-banner{
     background: var(--red); color: var(--navy); font-family: var(--mono); font-size: 12px;
@@ -276,6 +284,7 @@
     #reservations-print-area{ display: none; }
     #dashboard-print-area{ display: none; }
     #summary-print-area{ display: none; }
+    #event-summary-print-area{ display: none; }
   }
   .summary-card-list{ text-align:left; width:100%; font-size:10px; line-height:1.65; }
   .summary-card-list .trip-row{ display:flex; justify-content:space-between; gap:6px; border-bottom:1px dotted #c8ceda; padding:2px 0; }
@@ -302,6 +311,7 @@
       <button class="tab active" data-tab="dashboard">Dashboard</button>
       <button class="tab" data-tab="log">Log</button>
       <button class="tab" data-tab="reservations">Reservations</button>
+      <button class="tab" data-tab="summary">Summary</button>
     </div>
   </div>
 
@@ -523,6 +533,27 @@ Alex Kim
       </div>
       <div id="reservations-body"></div>
       <div id="reservations-print-area" class="print-target"></div>
+    </div>
+
+    <!-- SUMMARY TAB -->
+    <div id="tab-summary" class="tab-content hidden">
+      <div class="card">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <h2 style="margin:0;">Event Summary</h2>
+          <button class="btn secondary" id="print-summary-btn">Print Summary</button>
+        </div>
+        <p class="muted" style="margin-top:8px;">A quick overview of how the event went — good for a briefing without digging through individual tabs. Updates live.</p>
+      </div>
+      <div id="summary-stats-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;"></div>
+      <div class="card">
+        <h2>Reservations by Trip</h2>
+        <div id="summary-reservations-body"></div>
+      </div>
+      <div class="card">
+        <h2>Boarding by Trip</h2>
+        <div id="summary-boarding-body"></div>
+      </div>
+      <div id="event-summary-print-area" class="print-target"></div>
     </div>
 
   </div>
@@ -793,6 +824,7 @@ Alex Kim
     if(activeTab === 'dashboard') renderDashboard();
     if(activeTab === 'log') renderLog();
     if(activeTab === 'reservations') renderReservationsTab();
+    if(activeTab === 'summary') renderSummaryTab();
   }
 
   // ---- Tabs ----
@@ -807,6 +839,7 @@ Alex Kim
       if(btn.dataset.tab === 'dashboard') renderDashboard();
       if(btn.dataset.tab === 'log') renderLog();
       if(btn.dataset.tab === 'reservations') renderReservationsTab();
+      if(btn.dataset.tab === 'summary') renderSummaryTab();
     });
   });
 
@@ -1093,8 +1126,86 @@ Alex Kim
   // All four print areas share the .print-target class, which becomes visible for ANY of them
   // during printing — so whichever one you're NOT printing must be emptied first, or its
   // leftover content from an earlier click overlaps the one you actually want.
+  function renderSummaryTab(){
+    const statsGrid = el('summary-stats-grid');
+    const resBody = el('summary-reservations-body');
+    const boardBody = el('summary-boarding-body');
+    if(!statsGrid || !resBody || !boardBody) return;
+    if(roster.length === 0){
+      statsGrid.innerHTML = '<div class="stat-card"><p class="muted" style="margin:0;">Build a passenger list in the Setup tab first.</p></div>';
+      resBody.innerHTML = '';
+      boardBody.innerHTML = '';
+      return;
+    }
+
+    const totalAttendees = roster.length;
+    const reservationsMade = Object.values(reservationSubmitted).filter(Boolean).length;
+    const reservationRate = totalAttendees > 0 ? Math.round((reservationsMade / totalAttendees) * 100) : 0;
+    const totalBoarded = Object.keys(checkins).length;
+
+    // No-shows: only counted for trips that have actually concluded (fully closed) — a future
+    // trip's reservation isn't a no-show yet, they just haven't boarded it.
+    let noShows = 0;
+    SESSIONS.forEach(s=>{
+      if(!isTripFullyClosed(s.id)) return;
+      roster.forEach(r=>{
+        const key = checkinKey(s.id, r.id);
+        const res = reservations[key];
+        if(res && res !== 'none' && res !== 'driving' && !checkins[key]) noShows++;
+      });
+    });
+
+    statsGrid.innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total Attendees</div><div class="stat-value">${totalAttendees}</div></div>
+      <div class="stat-card"><div class="stat-label">Reservations Made</div><div class="stat-value">${reservationsMade}</div><div class="stat-sub">${reservationRate}% of attendees</div></div>
+      <div class="stat-card"><div class="stat-label">Total Boarded</div><div class="stat-value">${totalBoarded}</div><div class="stat-sub">across all trips</div></div>
+      <div class="stat-card"><div class="stat-label">No-Shows</div><div class="stat-value">${noShows}</div><div class="stat-sub">reserved but never boarded a concluded trip</div></div>
+    `;
+
+    resBody.innerHTML = SESSIONS.map(s=>{
+      const reserved = roster.filter(r=>{
+        const v = reservations[checkinKey(s.id, r.id)];
+        return v && v !== 'none' && v !== 'driving';
+      }).length;
+      return `<div class="summary-trip-row"><span>${escapeHtml(s.label)}</span><span>${reserved} reserved</span></div>`;
+    }).join('');
+
+    boardBody.innerHTML = SESSIONS.map(s=>{
+      const reserved = roster.filter(r=>{
+        const v = reservations[checkinKey(s.id, r.id)];
+        return v && v !== 'none' && v !== 'driving';
+      }).length;
+      const boarded = roster.filter(r=> checkins[checkinKey(s.id, r.id)]).length;
+      const pct = reserved > 0 ? Math.round((boarded / reserved) * 100) : (boarded > 0 ? 100 : 0);
+      return `<div class="summary-trip-row">
+        <span>${escapeHtml(s.label)}</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="summary-bar-bg"><div class="summary-bar-fill" style="width:${Math.min(100,pct)}%;"></div></div>
+          <span style="font-family:var(--mono); font-size:12px; width:70px; text-align:right;">${boarded}/${reserved || boarded} &middot; ${pct}%</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  el('print-summary-btn').addEventListener('click', ()=>{
+    renderSummaryTab(); // ensure the on-screen version is current before mirroring it into print
+    const statsHtml = el('summary-stats-grid').innerHTML;
+    const resHtml = el('summary-reservations-body').innerHTML;
+    const boardHtml = el('summary-boarding-body').innerHTML;
+    let printHtml = `<h2 style="margin-bottom:4px;">Event Summary</h2>
+      <p style="font-family:var(--mono); font-size:12px; color:#555; margin-top:0; margin-bottom:20px;">Printed ${new Date().toLocaleString()}</p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px;">${statsHtml}</div>
+      <h3 style="margin-bottom:6px;">Reservations by Trip</h3>
+      <div style="margin-bottom:20px;">${resHtml}</div>
+      <h3 style="margin-bottom:6px;">Boarding by Trip</h3>
+      <div>${boardHtml}</div>`;
+    el('event-summary-print-area').innerHTML = printHtml;
+    clearOtherPrintAreas('event-summary-print-area');
+    window.print();
+  });
+
   function clearOtherPrintAreas(keepId){
-    ['pass-grid', 'summary-grid', 'dashboard-print-area', 'reservations-print-area'].forEach(id=>{
+    ['pass-grid', 'summary-grid', 'dashboard-print-area', 'reservations-print-area', 'event-summary-print-area'].forEach(id=>{
       if(id !== keepId){
         const node = el(id);
         if(node) node.innerHTML = '';
@@ -2408,6 +2519,7 @@ Alex Kim
     renderCheckin();
     renderDashboard();
     renderReservationsTab();
+    renderSummaryTab();
   }
 })();
 </script>

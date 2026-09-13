@@ -437,6 +437,8 @@
 
   // ---- Identity: type-to-search + mandatory confirmation ----
   let selectedPersonId = null;
+  let reservationDeadline = ''; // module-level so renderMainFlow can check it per-person, not just onRemoteUpdate globally
+  let reservationsForceOpen = false;
   let justSubmitted = false; // true only for the render immediately following a successful save — plays the confirmation animation once, not on every later visit
   let pendingPersonId = null;
   let tentativeSelections = {}; // sessionId -> shuttle letter or SKIP, held locally until saved
@@ -555,6 +557,21 @@
     if(!selectedPersonId || !dataLoaded) return;
     const trips = reservableTrips();
 
+    if(reservationSubmitted[selectedPersonId]){
+      renderLockedView(trips);
+      return;
+    }
+
+    // Not yet submitted — if the deadline has passed (and hasn't been manually reopened), block
+    // starting or finishing a NEW reservation. The name-search screen itself stays reachable
+    // regardless (handled before this function ever runs), so someone who already submitted can
+    // still look themselves up — including from a different device — and see their summary.
+    const deadlinePassed = reservationDeadline && todayStr() >= reservationDeadline && !reservationsForceOpen;
+    if(deadlinePassed){
+      showReservationsClosedOverlay();
+      return;
+    }
+
     if(trips.length === 0){
       el('locked-view').classList.add('hidden');
       el('selection-flow').classList.remove('hidden');
@@ -565,11 +582,6 @@
       return;
     }
     el('review-btn').style.display = 'block';
-
-    if(reservationSubmitted[selectedPersonId]){
-      renderLockedView(trips);
-      return;
-    }
 
     el('locked-view').classList.add('hidden');
     el('summary-card').classList.add('hidden');
@@ -798,12 +810,13 @@
     reservations = (data && data.reservations) || {};
     reservationSubmitted = (data && data.reservationSubmitted) || {};
     drivers = (data && data.drivers) || [];
-    const reservationDeadline = (data && data.reservationDeadline) || '';
-    const reservationsForceOpen = (data && data.reservationsForceOpen) === true;
-    if(reservationDeadline && todayStr() >= reservationDeadline && !reservationsForceOpen){
-      showReservationsClosedOverlay();
-      return; // deadline passed and admin hasn't manually reopened it — stop here
-    }
+    reservationDeadline = (data && data.reservationDeadline) || '';
+    reservationsForceOpen = (data && data.reservationsForceOpen) === true;
+    // The deadline no longer blocks the whole page here — it's checked per-person inside
+    // renderMainFlow() instead, so someone who already submitted before the deadline can still
+    // find themselves and view their summary. Always restore the normal view and proceed; the
+    // "closed" message only appears if this specific visitor still needs to (and now can't)
+    // start or finish a new reservation.
     restoreNormalView(); // in case a previous snapshot had shown either overlay
     driverSubs = (data && data.driverSubs) || {};
     dataLoaded = true;

@@ -778,7 +778,16 @@
     try{
       await eventDocRef.update(updates);
       localStorage.setItem('shuttle_reservation_person_id', selectedPersonId);
+      // Update local state immediately and show the confirmation right now — waiting for this
+      // write to round-trip back through the live listener before rendering anything caused a
+      // real, sometimes multi-second delay before the confirmation (and its animation) appeared.
+      // The listener will still confirm this shortly after, but the screen no longer waits on it.
+      reservationSubmitted[selectedPersonId] = true;
+      trips.forEach(s=>{
+        reservations[checkinKey(s.id, selectedPersonId)] = tentativeSelections[s.id];
+      });
       justSubmitted = true;
+      renderLockedView(trips);
       showFlash('All set — your reservations are saved.', 'ok');
     }catch(e){
       console.error('Save failed', e);

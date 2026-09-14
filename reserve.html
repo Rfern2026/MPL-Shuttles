@@ -145,7 +145,7 @@
   <div style="background:var(--navy-panel); border-radius:14px; padding:32px 28px; max-width:380px; text-align:center;">
     <p style="font-family:var(--mono); font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--brand); margin:0 0 10px 0;">2026 FNG NA Annual MP&amp;L Leadership Conference</p>
     <h1 style="font-size:20px; margin:0 0 12px 0; color:var(--paper);">This Event Has Ended</h1>
-    <p style="color:var(--ink-soft); font-size:14px; line-height:1.6; margin:0;">Thanks for riding with us! Shuttle check-in and reservations are no longer active. If you need anything, please reach out to your Corporate MP&L Team directly.</p>
+    <p style="color:var(--ink-soft); font-size:14px; line-height:1.6; margin:0;">Thanks for riding with us! Shuttle check-in and reservations are no longer active. If you need anything, please reach out to your event organizer directly.</p>
   </div>
 </div>
 
@@ -153,7 +153,7 @@
   <div style="background:var(--navy-panel); border-radius:14px; padding:32px 28px; max-width:380px; text-align:center;">
     <p style="font-family:var(--mono); font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--brand); margin:0 0 10px 0;">2026 FNG NA Annual MP&amp;L Leadership Conference</p>
     <h1 style="font-size:20px; margin:0 0 12px 0; color:var(--paper);">Reservations Are Closed</h1>
-    <p style="color:var(--ink-soft); font-size:14px; line-height:1.6; margin:0;">The deadline to reserve a shuttle for this event has passed. If you still need a reservation, please contact your Corporate MP&L Team directly.</p>
+    <p style="color:var(--ink-soft); font-size:14px; line-height:1.6; margin:0;">The deadline to reserve a shuttle for this event has passed. If you still need a reservation, please contact your event organizer directly.</p>
   </div>
 </div>
 
@@ -235,7 +235,7 @@
       <div class="check-confirm-text">Reservation Confirmed!</div>
     </div>
     <h2>Your Reservations</h2>
-    <p class="muted" style="margin-top:-6px;">Submitted and locked in. If you need to change anything, contact Corporate MP&L Team.</p>
+    <p class="muted" style="margin-top:-6px;">Submitted and locked in. If you need to change anything, contact the event organizer.</p>
     <div id="print-area">
       <div id="locked-list"></div>
       <div id="boarding-pass-block" style="margin-top:20px; padding-top:18px; border-top:1px dashed var(--navy-panel-2);">
@@ -246,7 +246,7 @@
           <div id="pass-qr" style="display:flex; justify-content:center;"></div>
           <div style="font-family:var(--mono); font-size:12px; letter-spacing:.08em; color:#666; margin-top:10px;" id="pass-code"></div>
         </div>
-        <p class="muted" style="margin:12px 0 0 0;">Printed copies of the QR code will also be handed out on the first day of the conference.</p>
+        <p class="muted" style="margin:12px 0 0 0;">Printed copies will also be handed out on the first day of the conference, so there's no need to bring this if you'd rather not.</p>
       </div>
     </div>
     <button class="btn secondary full-width" id="print-btn" style="margin-top:14px;">Print My Pass &amp; Selections</button>
@@ -356,7 +356,8 @@
   }
 
   const SESSIONS = [
-    { id: 'mon-dinner', label: 'Mon 9/21 · Dinner' },
+    { id: 'mon-dinner', label: 'Mon 9/21 · Eve → Dinner' },
+    { id: 'mon-eve-hotel', label: 'Mon 9/21 · Eve → Hotel' },
     { id: 'd1-am', label: 'Tue 9/22 · Morning' },
     { id: 'd1-pm', label: 'Tue 9/22 · Afternoon' },
     { id: 'd1-eve-hub', label: 'Tue 9/22 · Eve → HUB' },
@@ -481,7 +482,7 @@
     if(!person) return;
     const entered = el('identity-phone-input').value.replace(/\D/g, '');
     if(!person.phone){
-      showFlash('Phone verification isn\u2019t set up for you yet. Contact Corporate MP&L Team to look up your reservation.', 'warn');
+      showFlash('Phone verification isn\u2019t set up for you yet. Contact the event organizer to look up your reservation.', 'warn');
       return;
     }
     if(entered.length !== 4){
@@ -489,7 +490,7 @@
       return;
     }
     if(entered !== person.phone){
-      showFlash('That doesn\u2019t match our records. Check the number and try again, or contact your Corporate MP&L.', 'warn');
+      showFlash('That doesn\u2019t match our records. Check the number and try again, or contact the event organizer.', 'warn');
       return;
     }
     selectedPersonId = pendingPersonId;
@@ -523,7 +524,7 @@
     if(q.length === 0){ box.innerHTML = ''; return; }
     const matches = roster.filter(r => r.name.toLowerCase().includes(q)).slice(0, 8);
     if(matches.length === 0){
-      box.innerHTML = '<div class="suggestion-empty">No matching name on the passenger list. Check your spelling, or contact Corporate MP&L.</div>';
+      box.innerHTML = '<div class="suggestion-empty">No matching name on the passenger list. Check your spelling, or contact the event organizer.</div>';
       return;
     }
     box.innerHTML = matches.map(r=>`<div class="suggestion-item" data-id="${r.id}">${escapeHtml(r.name)}${reservationSubmitted[r.id] ? ' <span style="color:var(--ink-soft); font-size:12px;">(already booked)</span>' : ''}</div>`).join('');

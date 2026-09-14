@@ -2397,7 +2397,10 @@ Alex Kim
         <div class="flip-label">Shuttle ${l}${closed ? ' · Closed' : ''}</div>
         <div class="flip-value">${boarded}</div>
         <div class="attendee-meta" style="margin-top:2px;">${reservedCount} reserved</div>
-        <button class="btn secondary shuttle-toggle-btn" data-shuttle="${l}" style="margin-top:10px; font-size:11px; padding:8px 10px; width:100%;">${closed ? 'Reopen' : 'Close'}</button>
+        <div class="row" style="margin-top:10px; gap:6px;">
+          <button class="btn secondary shuttle-toggle-btn" data-shuttle="${l}" style="font-size:11px; padding:8px 10px; flex:1; margin-bottom:0;">${closed ? 'Reopen' : 'Close'}</button>
+          <button class="btn danger shuttle-clear-btn" data-shuttle="${l}" style="font-size:11px; padding:8px 10px; flex:1; margin-bottom:0;">Clear</button>
+        </div>
       </div>`;
     });
     const totalAll = roster.length;
@@ -2422,6 +2425,28 @@ Alex Kim
         if(!wasFullyClosed && isTripFullyClosed(session)){
           showTripReviewModal(session);
         }
+      });
+    });
+    grid.querySelectorAll('.shuttle-clear-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const l = btn.dataset.shuttle;
+        const count = roster.filter(r=>{
+          const c = checkins[checkinKey(session, r.id)];
+          return c && c.shuttle === l;
+        }).length;
+        if(count === 0){
+          alert(`Nobody's checked in on Shuttle ${l} for this trip — nothing to clear.`);
+          return;
+        }
+        if(!confirm(`Clear all ${count} check-in(s) on Shuttle ${l} for ${sessionLabel(session)}? Only this shuttle and this trip are affected — everything else stays untouched. Cannot be undone.`)) return;
+        roster.forEach(r=>{
+          const key = checkinKey(session, r.id);
+          if(checkins[key] && checkins[key].shuttle === l) delete checkins[key];
+        });
+        await saveCheckins();
+        renderDashboard();
+        renderCheckinList();
+        renderLiveCounter();
       });
     });
 

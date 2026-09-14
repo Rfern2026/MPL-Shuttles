@@ -311,6 +311,7 @@
           <select id="checkin-shuttle-active" style="margin-bottom:0; width:auto;"></select>
           <button class="btn" id="toggle-scan-btn">Start Camera Scan</button>
         </div>
+        <p class="muted" id="trip-venue-note" style="margin-top:-6px; font-size:12px;"></p>
         <div class="scan-box hidden" id="scan-box">
           <div id="reader"></div>
           <button class="btn" id="scan-next-btn" style="display:none; width:100%; margin-top:10px;">Scan Next Passenger</button>
@@ -405,6 +406,34 @@
     { id: 'd2-eve-dinner', label: 'Wed 9/23 · Eve → Dinner', date: '2026-09-23' },
     { id: 'd2-eve-hotel', label: 'Wed 9/23 · Eve → Hotel', date: '2026-09-23' }
   ];
+
+  const VENUE = {
+    fng: { name: 'Flex N Gate Troy', address: '1400 Rochester Rd, Troy, MI 48083' },
+    hotel: { name: 'Staybridge Suites', address: '8333 15 Mile Rd, Sterling Heights, MI 48312' },
+    granite: { name: 'Granite City Brewery', address: '699 W Big Beaver Rd, Troy, MI 48084' },
+    hub: { name: 'The Hub Stadium', address: '2550 Innovation Dr, Auburn Hills, MI 48326' },
+    johnnyblacks: { name: "Johnny Blacks Public House", address: '35000 Moravian Dr, Sterling Heights, MI 48312' }
+  };
+  const TRIP_VENUES = {
+    'mon-dinner': [VENUE.granite],
+    'mon-eve-hotel': [VENUE.hotel],
+    'd1-am': [VENUE.hotel, VENUE.fng],
+    'd1-pm': [VENUE.hotel, VENUE.fng],
+    'd1-eve-hub': [VENUE.hub],
+    'd1-eve-hotel': [VENUE.hotel],
+    'd2-am': [VENUE.hotel, VENUE.fng],
+    'd2-pm': [VENUE.hotel, VENUE.fng],
+    'd2-eve-dinner': [VENUE.johnnyblacks],
+    'd2-eve-hotel': [VENUE.hotel]
+  };
+  function mapsUrl(address){
+    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address);
+  }
+  function tripVenueHtml(sessionId){
+    const venues = TRIP_VENUES[sessionId];
+    if(!venues || venues.length === 0) return '';
+    return venues.map(v=>`<a href="${mapsUrl(v.address)}" target="_blank" rel="noopener" style="color:inherit; text-decoration:none;">\uD83D\uDCCD ${escapeHtml(v.name)}</a>`).join(' &nbsp;\u2192&nbsp; ');
+  }
 
   function todayStr(){
     const d = new Date();
@@ -998,6 +1027,8 @@
     const current = sel.value;
     sel.innerHTML = openLetters.map(l=>`<option value="${l}">Shuttle ${l}</option>`).join('');
     if(openLetters.includes(current)) sel.value = current;
+    const venueNote = el('trip-venue-note');
+    if(venueNote) venueNote.innerHTML = session ? tripVenueHtml(session) : '';
   }
 
   function populateSessionSelects(){

@@ -515,6 +515,12 @@ Alex Kim
     <!-- RESERVATIONS TAB -->
     <div id="tab-reservations" class="tab-content hidden">
       <div class="card">
+        <h2>Look Up a Passenger</h2>
+        <p class="muted" style="margin-top:-6px;">See one person's full reservation across every trip, on screen — no need to open QR Codes or print anything.</p>
+        <select id="passenger-lookup-select" style="margin-bottom:0;"></select>
+        <div id="passenger-lookup-body" style="margin-top:12px;"></div>
+      </div>
+      <div class="card">
         <h2>Passenger reservations</h2>
         <p class="muted" style="margin-top:-6px;">Send passengers the reservation link (reserve.html) so they can pick a departure time themselves. This tab shows who reserved what — it's read-only except for clearing a reservation if someone needs to be freed up.</p>
         <div class="row">
@@ -1564,6 +1570,48 @@ Alex Kim
     resetSel.innerHTML = '<option value="">— Select Passenger —</option>' +
       roster.slice().sort((a,b)=>a.name.localeCompare(b.name))
         .map(r=>`<option value="${r.id}">${escapeHtml(r.name)}${reservationSubmitted[r.id] ? ' (submitted)' : ''}</option>`).join('');
+
+    // Look Up a Passenger: same full per-trip breakdown as the printed reservation summary
+    // cards, but on screen for just one person — no print dialog, no QR tab needed.
+    const lookupSel = el('passenger-lookup-select');
+    if(lookupSel){
+      const prevLookup = lookupSel.value;
+      lookupSel.innerHTML = '<option value="">— Select Passenger —</option>' +
+        roster.slice().sort((a,b)=>a.name.localeCompare(b.name))
+          .map(r=>`<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
+      if(roster.some(r=>r.id === prevLookup)) lookupSel.value = prevLookup;
+      function renderPassengerLookup(){
+        const body = el('passenger-lookup-body');
+        if(!body) return;
+        const pid = lookupSel.value;
+        if(!pid){ body.innerHTML = ''; return; }
+        const person = roster.find(r=>r.id===pid);
+        if(!person){ body.innerHTML = ''; return; }
+        const reservableTrips = SESSIONS.filter(s => shuttleLettersFor(s.id).some(l => shuttleSchedule[closedKey(s.id, l)]));
+        const rows = reservableTrips.map(s=>{
+          const val = reservations[checkinKey(s.id, pid)];
+          let text, color;
+          if(val === 'none'){ text = 'No shuttle needed'; color = 'var(--ink-soft)'; }
+          else if(val === 'driving'){ text = 'Driving this trip'; color = 'var(--teal)'; }
+          else if(val){
+            const cfg = shuttleSchedule[closedKey(s.id, val)];
+            text = (cfg ? cfg.time : '') + ' · Shuttle ' + val;
+            color = 'var(--teal)';
+          } else {
+            text = 'Not yet reserved';
+            color = 'var(--red)';
+          }
+          return `<div class="summary-trip-row"><span>${escapeHtml(s.label)}</span><span style="color:${color};">${text}</span></div>`;
+        }).join('');
+        body.innerHTML = `
+          <h3 style="margin:0 0 8px 0; font-family:var(--mono); font-size:14px; text-transform:uppercase; letter-spacing:0.06em; color:var(--brand); border-top:1px solid var(--navy-panel-2); padding-top:12px;">${escapeHtml(person.name)}</h3>
+          ${rows || '<p class="muted" style="margin:6px 0 0 0;">No trips configured yet.</p>'}
+        `;
+      }
+      lookupSel.onchange = renderPassengerLookup;
+      renderPassengerLookup();
+    }
+
     el('reset-passenger-btn').onclick = async ()=>{
       const pid = resetSel.value;
       if(!pid) return;

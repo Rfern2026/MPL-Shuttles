@@ -532,6 +532,18 @@ Alex Kim
           <button class="btn danger" id="reset-passenger-btn">Reset This Passenger</button>
         </div>
       </div>
+      <div class="card">
+        <h2>Bulk Reassign Shuttle</h2>
+        <p class="muted" style="margin-top:-6px;">Moves everyone reserved on one shuttle to another, for a single trip, in one step — for consolidating underfilled shuttles onto fewer vans/drivers. Doesn't touch anyone marked "driving" or "no shuttle needed." After reassigning, uncheck the now-empty shuttle in Setup → Shuttle Schedule for this trip so it stops showing as an option, and update Driver Substitutions so the right driver covers the remaining shuttle(s).</p>
+        <div class="row">
+          <select id="bulk-reassign-session" style="margin-bottom:0; min-width:180px;"></select>
+          <select id="bulk-reassign-from" style="margin-bottom:0; width:auto;"></select>
+          <span class="muted" style="align-self:center;">&rarr;</span>
+          <select id="bulk-reassign-to" style="margin-bottom:0; width:auto;"></select>
+          <button class="btn danger" id="bulk-reassign-btn">Reassign All</button>
+        </div>
+        <p class="muted" id="bulk-reassign-note" style="margin-top:8px;"></p>
+      </div>
       <div id="reservations-body"></div>
       <div id="reservations-print-area" class="print-target"></div>
     </div>
@@ -553,6 +565,25 @@ Alex Kim
       <div class="card">
         <h2>Boarding by Trip</h2>
         <div id="summary-boarding-body"></div>
+      </div>
+      <div class="card">
+        <h2>All Trips &amp; Shuttles</h2>
+        <p class="muted" style="margin-top:-6px;">Every shuttle on every trip, all at once — no need to pick a trip first. Closed shuttles are marked.</p>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;" id="all-trips-shuttles-table">
+            <thead>
+              <tr style="text-align:left; border-bottom:2px solid var(--navy-panel-2);">
+                <th style="padding:6px 8px;">Trip</th>
+                <th style="padding:6px 8px;">Shuttle</th>
+                <th style="padding:6px 8px;">Reserved</th>
+                <th style="padding:6px 8px;">Boarded</th>
+                <th style="padding:6px 8px;">Capacity</th>
+                <th style="padding:6px 8px;">Status</th>
+              </tr>
+            </thead>
+            <tbody id="all-trips-shuttles-body"></tbody>
+          </table>
+        </div>
       </div>
       <div id="event-summary-print-area" class="print-target"></div>
     </div>
@@ -1218,6 +1249,41 @@ Alex Kim
         </div>
       </div>`;
     }).join('');
+
+    // All Trips & Shuttles — every shuttle configured for every trip, in one flat table, so
+    // there's no need to pick a trip first just to see the full picture.
+    const allBody = el('all-trips-shuttles-body');
+    if(allBody){
+      let rowsHtml = '';
+      SESSIONS.forEach(s=>{
+        const tripLetters = shuttleLettersFor(s.id).filter(l => shuttleSchedule[closedKey(s.id, l)]);
+        if(tripLetters.length === 0){
+          rowsHtml += `<tr style="border-bottom:1px solid var(--navy-panel-2);">
+            <td style="padding:6px 8px; font-weight:600;">${escapeHtml(s.label)}</td>
+            <td colspan="5" style="padding:6px 8px; color:var(--ink-soft);">No shuttle schedule configured yet</td>
+          </tr>`;
+          return;
+        }
+        tripLetters.forEach((l, i)=>{
+          const cfg = shuttleSchedule[closedKey(s.id, l)];
+          const reserved = roster.filter(r => reservations[checkinKey(s.id, r.id)] === l).length;
+          const boarded = roster.filter(r => { const c = checkins[checkinKey(s.id, r.id)]; return c && c.shuttle === l; }).length;
+          const closed = isShuttleClosed(s.id, l);
+          const statusHtml = closed
+            ? '<span style="color:var(--red);">Closed</span>'
+            : '<span style="color:var(--teal);">Open</span>';
+          rowsHtml += `<tr style="border-bottom:1px solid var(--navy-panel-2);">
+            <td style="padding:6px 8px; font-weight:600;">${i === 0 ? escapeHtml(s.label) : ''}</td>
+            <td style="padding:6px 8px;">Shuttle ${l}</td>
+            <td style="padding:6px 8px;">${reserved}</td>
+            <td style="padding:6px 8px;">${boarded}</td>
+            <td style="padding:6px 8px;">${cfg.capacity}</td>
+            <td style="padding:6px 8px;">${statusHtml}</td>
+          </tr>`;
+        });
+      });
+      allBody.innerHTML = rowsHtml;
+    }
   }
 
   el('print-summary-btn').addEventListener('click', ()=>{
@@ -1225,13 +1291,16 @@ Alex Kim
     const statsHtml = el('summary-stats-grid').innerHTML;
     const resHtml = el('summary-reservations-body').innerHTML;
     const boardHtml = el('summary-boarding-body').innerHTML;
+    const allTripsTableHtml = el('all-trips-shuttles-table').outerHTML;
     let printHtml = `<h2 style="margin-bottom:4px;">Event Summary</h2>
       <p style="font-family:var(--mono); font-size:12px; color:#555; margin-top:0; margin-bottom:20px;">Printed ${new Date().toLocaleString()}</p>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px;">${statsHtml}</div>
       <h3 style="margin-bottom:6px;">Reservations by Trip</h3>
       <div style="margin-bottom:20px;">${resHtml}</div>
       <h3 style="margin-bottom:6px;">Boarding by Trip</h3>
-      <div>${boardHtml}</div>`;
+      <div style="margin-bottom:20px;">${boardHtml}</div>
+      <h3 style="margin-bottom:6px;">All Trips &amp; Shuttles</h3>
+      ${allTripsTableHtml}`;
     el('event-summary-print-area').innerHTML = printHtml;
     clearOtherPrintAreas('event-summary-print-area');
     window.print();
@@ -1489,6 +1558,80 @@ Alex Kim
       delete reservationSubmitted[pid];
       SESSIONS.forEach(s=>{ delete reservations[checkinKey(s.id, pid)]; });
       await resetPassengerReservations(pid);
+      renderReservationsTab();
+    };
+
+    // ---- Bulk Reassign Shuttle — independent of the trip selector above ----
+    async function bulkReassignShuttle(sessionId, affectedIds, toLetter){
+      if(!isConfigured) return;
+      const updates = {};
+      affectedIds.forEach(pid=>{ updates['reservations.' + checkinKey(sessionId, pid)] = toLetter; });
+      try{ await eventDocRef.update(updates); }
+      catch(e){ console.error('Failed to bulk reassign shuttle', e); }
+    }
+
+    const bulkSessionSel = el('bulk-reassign-session');
+    if(bulkSessionSel.options.length === 0){
+      bulkSessionSel.innerHTML = SESSIONS.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+    }
+    function renderBulkReassignShuttleOptions(){
+      const bulkSession = bulkSessionSel.value || SESSIONS[0].id;
+      const bulkLetters = shuttleLettersFor(bulkSession);
+      const countFor = l => roster.filter(r => reservations[checkinKey(bulkSession, r.id)] === l).length;
+      const optionsHtml = bulkLetters.map(l=>`<option value="${l}">Shuttle ${l} (${countFor(l)} reserved)</option>`).join('');
+      el('bulk-reassign-from').innerHTML = optionsHtml;
+      el('bulk-reassign-to').innerHTML = optionsHtml;
+      updateBulkReassignNote();
+    }
+    function updateBulkReassignNote(){
+      const bulkSession = bulkSessionSel.value || SESSIONS[0].id;
+      const from = el('bulk-reassign-from').value;
+      const to = el('bulk-reassign-to').value;
+      const note = el('bulk-reassign-note');
+      if(!from || !to){ note.textContent = ''; return; }
+      if(from === to){ note.textContent = 'Pick two different shuttles.'; note.style.color = 'var(--red)'; return; }
+      const fromCount = roster.filter(r => reservations[checkinKey(bulkSession, r.id)] === from).length;
+      const toCount = roster.filter(r => reservations[checkinKey(bulkSession, r.id)] === to).length;
+      const cfg = shuttleSchedule[closedKey(bulkSession, to)];
+      const capSeats = cfg ? Math.max(0, cfg.capacity - 1) : null;
+      const resultTotal = fromCount + toCount;
+      let msg = `Moving ${fromCount} passenger(s) from Shuttle ${from} onto Shuttle ${to} (currently ${toCount}) would result in ${resultTotal}${capSeats !== null ? ' / ' + capSeats + ' passenger seats' : ''}.`;
+      if(capSeats !== null && resultTotal > capSeats){
+        msg += ' ⚠ That exceeds this shuttle\'s configured capacity — double check the real van can hold everyone before proceeding.';
+        note.style.color = 'var(--amber)';
+      } else {
+        note.style.color = 'var(--ink-soft)';
+      }
+      note.textContent = msg;
+    }
+    bulkSessionSel.onchange = renderBulkReassignShuttleOptions;
+    el('bulk-reassign-from').onchange = updateBulkReassignNote;
+    el('bulk-reassign-to').onchange = updateBulkReassignNote;
+    if(el('bulk-reassign-from').options.length === 0) renderBulkReassignShuttleOptions();
+
+    el('bulk-reassign-btn').onclick = async ()=>{
+      const bulkSession = bulkSessionSel.value;
+      const from = el('bulk-reassign-from').value;
+      const to = el('bulk-reassign-to').value;
+      if(!bulkSession || !from || !to || from === to){
+        alert('Pick a trip and two different shuttles first.');
+        return;
+      }
+      const affected = roster.filter(r => reservations[checkinKey(bulkSession, r.id)] === from);
+      if(affected.length === 0){
+        alert(`Nobody is currently reserved on Shuttle ${from} for this trip — nothing to reassign.`);
+        return;
+      }
+      const toCount = roster.filter(r => reservations[checkinKey(bulkSession, r.id)] === to).length;
+      const cfg = shuttleSchedule[closedKey(bulkSession, to)];
+      let warnLine = '';
+      if(cfg && (toCount + affected.length) > Math.max(0, cfg.capacity - 1)){
+        warnLine = `\n\n⚠ Warning: this would put ${toCount + affected.length} passengers on Shuttle ${to}, over its configured ${Math.max(0, cfg.capacity - 1)} passenger seats. Proceed only if you know the real van can hold them.`;
+      }
+      if(!confirm(`Move all ${affected.length} passenger(s) from Shuttle ${from} to Shuttle ${to} for ${sessionLabel(bulkSession)}?${warnLine}`)) return;
+      affected.forEach(r=>{ reservations[checkinKey(bulkSession, r.id)] = to; });
+      await bulkReassignShuttle(bulkSession, affected.map(r=>r.id), to);
+      renderBulkReassignShuttleOptions();
       renderReservationsTab();
     };
 
